@@ -1,20 +1,23 @@
 package com.kristjanskutta.doggylight
 
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.PendingIntent
 import android.bluetooth.*
 import android.bluetooth.BluetoothDevice.TRANSPORT_LE
 import android.bluetooth.BluetoothGatt.GATT_SUCCESS
 import android.bluetooth.BluetoothGattCharacteristic.FORMAT_SINT32
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.service.autofill.Validators.or
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
-import java.lang.Exception
 import java.util.*
-import kotlin.experimental.or
 
 
 private const val TITLE_TAG = "settingsActivityTitle"
@@ -29,8 +32,9 @@ class CollarSettingsActivity : AppCompatActivity(),
     PreferenceFragmentCompat.OnPreferenceStartFragmentCallback,
     OnFragmentPreferenceChanged {
 
+    private val PERMISSION_REQUEST_RECORD_AUDIO = 6001
+
     var device: BluetoothDevice? = null
-    var connectedGatt: BluetoothGatt? = null
     var ledService: BluetoothGattService? = null
     var currentEffectCharacteristic: BluetoothGattCharacteristic? = null
     var currentEffectId: UUID? = null
@@ -43,22 +47,50 @@ class CollarSettingsActivity : AppCompatActivity(),
         device = intent?.extras?.getParcelable("collarDevice")
         val name = intent?.extras?.getString("collarName")
 
-        if (savedInstanceState == null) {
-            showLoadingMenu()
-        } else {
-            title = savedInstanceState.getCharSequence(TITLE_TAG)
-        }
-        supportFragmentManager.addOnBackStackChangedListener {
-            if (supportFragmentManager.backStackEntryCount == 0) {
-//                setTitle(name + " Settings")
-            }
-        }
+//        if (savedInstanceState == null) {
+//            showLoadingMenu()
+//        } else {
+//            title = savedInstanceState.getCharSequence(TITLE_TAG)
+//        }
+//        supportFragmentManager.addOnBackStackChangedListener {
+//            if (supportFragmentManager.backStackEntryCount == 0) {
+////                setTitle(name + " Settings")
+//            }
+//        }
+
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         setTitle(name + " Settings")
 
-        device?.connectGatt(this, false, mBluetoothGattCallback, TRANSPORT_LE)
-
 //        createPreferenceListener();
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        showLoadingMenu()
+        device?.connectGatt(this, false, gattWrapper, TRANSPORT_LE)
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        showLoadingMenu()
+        device?.connectGatt(this, false, gattWrapper, TRANSPORT_LE)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        gattWrapper.close()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (requestCode == PERMISSION_REQUEST_RECORD_AUDIO) {
+            updateVisualizerStreamEnabled()
+        }
     }
 
     private fun showLoadingMenu() {
@@ -68,10 +100,9 @@ class CollarSettingsActivity : AppCompatActivity(),
             .commit()
     }
 
-    private fun loadPreferenceMenu(subPreferences: Int?, effectSettings: ByteArray?) {
+    private fun loadPreferenceMenu(currentEffect: String) {
         val bundle = Bundle()
-        subPreferences?.let { bundle.putInt("subPreferences", it) }
-        effectSettings?.let { bundle.putByteArray("effectSettings", it) }
+        bundle.putString("currentEffect", currentEffect)
         val fragInfo = CollarEffectsFragment()
         fragInfo.arguments = bundle
 
@@ -79,6 +110,44 @@ class CollarSettingsActivity : AppCompatActivity(),
             .beginTransaction()
             .replace(R.id.settings, fragInfo)
             .commit()
+    }
+
+    private fun loadPreferenceMenu(subPreferences: Int, effectSettings: ByteArray) {
+        val bundle = Bundle()
+        bundle.putInt("subPreferences", subPreferences)
+        bundle.putByteArray("effectSettings", effectSettings)
+        val fragInfo = CollarEffectsFragment()
+        fragInfo.arguments = bundle
+
+        supportFragmentManager
+            .beginTransaction()
+            .replace(R.id.settings, fragInfo)
+            .commit()
+    }
+
+    private fun updateVisualizerStreamEnabled() {
+        val shouldEnableStream = currentEffectId == BLEConstants.LEDVisualizerSettingsCharacteristic
+        if (shouldEnableStream) {
+            if (BLEService.needsPermissions(this)) {
+                ActivityCompat.requestPermissions(
+                    this, BLEService.getPermissionList(), PERMISSION_REQUEST_RECORD_AUDIO
+                )
+            } else {
+                // Enable stream
+                Intent(this, BLEService::class.java).also { intent ->
+                    intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_REGISTER_DEVICE)
+                    intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+                    startService(intent)
+                }
+            }
+        } else {
+            // Disable stream
+            Intent(this, BLEService::class.java).also { intent ->
+                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_UNREGISTER_DEVICE)
+                intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+                startService(intent)
+            }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -91,96 +160,57 @@ class CollarSettingsActivity : AppCompatActivity(),
         if (supportFragmentManager.popBackStackImmediate()) {
             return true
         } else {
-            connectedGatt?.close()
-            connectedGatt = null
+            gattWrapper.close()
             finish()
             return true
         }
     }
 
-    private val mBluetoothGattCallback: BluetoothGattCallback = object : BluetoothGattCallback() {
-        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
-            Log.i("LOGGER", "BLE connection state: $newState")
-
-            if (status == GATT_SUCCESS) {
-                if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    // We successfully connected, proceed with service discovery
-                    connectedGatt = gatt
-                    gatt?.discoverServices();
-                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    // We successfully disconnected on our own request
-                    connectedGatt = null
-                    gatt?.close();
-                } else {
-                    // We're CONNECTING or DISCONNECTING, ignore for now
-                }
-            } else {
-                connectedGatt = null
-                gatt?.close();
-            }
-        }
-
-        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-            ledService = gatt?.getService(BLEConstants.LEDService)
+    var gattWrapper: BluetoothGattWrapper = object : BluetoothGattWrapper() {
+        override fun onWrappedServicesDiscovered(wrapper: BluetoothGattWrapper?, status: Int) {
+            ledService = wrapper?.wrappedGetService(BLEConstants.LEDService)
             val ledTypeCharacteristic = ledService?.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
-//            val stat = ledColorCharacteristic?.setValue(0xAAAAAAAA.toInt(), FORMAT_SINT32, 0)
-//            gatt?.writeCharacteristic(ledColorCharacteristic)
-//            Log.i("LOGGER", "Col stat: $stat")
-            gatt?.readCharacteristic(ledTypeCharacteristic)
+            wrapper?.wrappedReadCharacteristic(ledTypeCharacteristic)
         }
 
-        override fun onCharacteristicRead(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
+        override fun onWrappedCharacteristicRead(
+            wrapper: BluetoothGattWrapper?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+
             if (status != GATT_SUCCESS) {
                 return
             }
             when (characteristic?.uuid) {
                 BLEConstants.LEDTypeCharacteristic -> {
-//                val currentColor = characteristic?.getIntValue(FORMAT_SINT32, 0) ?: 0
-//                val man = supportFragmentManager.fragments[0] as PreferenceFragmentCompat
-//                man.preferenceManager.sharedPreferences.edit().putInt("effect_color", currentColor)
-
                     val currentType = characteristic?.getIntValue(FORMAT_SINT32, 0) ?: 0
-                    when (currentType) {
-                        0 ->
-                            gatt?.readCharacteristic(ledService?.getCharacteristic(BLEConstants.LEDBlinkSettingsCharacteristic))
-                    }
-
-                    // TODO adjust drop down thingy!!!!
+                    val effectUUID = Effects.effectIndexToUUID[currentType]
+                    wrapper?.wrappedReadCharacteristic(ledService?.getCharacteristic(effectUUID))
 
                     runOnUiThread {
-                        loadPreferenceMenu(null, null)
+                        loadPreferenceMenu(Effects.effectIndexToString[currentType]!!)
                     }
-//                val ledBlinkSettingsCharacteristic = ledService?.getCharacteristic(BLEConstants.LEDBlinkSettingsCharacteristic)
                 }
 
-                BLEConstants.LEDBlinkSettingsCharacteristic -> {
+                BLEConstants.LEDBlinkSettingsCharacteristic,
+                BLEConstants.LEDWaveSettingsCharacteristic,
+                BLEConstants.LEDColorWheelSettingsCharacteristic,
+                BLEConstants.LEDVisualizerSettingsCharacteristic -> {
                     val value = characteristic?.value!!
                     runOnUiThread {
                         currentEffectCharacteristic = characteristic
                         currentEffectId = characteristic?.uuid
                         currentEffectSettings = value
-                        loadPreferenceMenu(R.xml.collar_effects_preferences_blink, value)
+                        loadPreferenceMenu(Effects.effectUUIDToResource[currentEffectId]!!, value)
+                        updateVisualizerStreamEnabled()
                     }
                 }
+
+                else -> throw Exception()
             }
         }
-
-        override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
-            super.onCharacteristicWrite(gatt, characteristic, status)
-//            if (status != GATT_SUCCESS) {
-//                throw Exception("crud")
-//            }
-        }
     }
-
-//    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-//        val id: Int = item.getItemId()
-//        if (id == android.R.id.home) {
-//            finish() // or go to another activity
-//            return true
-//        }
-//        return super.onOptionsItemSelected(item)
-//    }
 
     override fun onPreferenceStartFragment(
         caller: PreferenceFragmentCompat,
@@ -205,7 +235,7 @@ class CollarSettingsActivity : AppCompatActivity(),
     }
 
     override fun onFragmentPreferenceChanged(key: String, value: Int) {
-        if (connectedGatt != null &&
+        if (gattWrapper != null &&
             currentEffectSettings != null
         ) {
             val isColor = Effects.isColor(key)
@@ -221,7 +251,7 @@ class CollarSettingsActivity : AppCompatActivity(),
             }
 
             currentEffectCharacteristic?.value = currentEffectSettings
-            connectedGatt?.writeCharacteristic(currentEffectCharacteristic)
+            gattWrapper?.wrappedWriteCharacteristic(currentEffectCharacteristic)
         }
     }
 
@@ -229,37 +259,31 @@ class CollarSettingsActivity : AppCompatActivity(),
         var typeIndex = -1
         when (key) {
             "led_type" -> {
-                when (value) {
-                    "blink" -> typeIndex = 0
-                    "wave" -> typeIndex = 1
-                }
+                typeIndex = Effects.effectStringToIndex[value]!!
             }
         }
 
         // Update LED type on device
         val ledTypeCharacteristic = ledService?.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
         ledTypeCharacteristic?.setValue(typeIndex, FORMAT_SINT32, 0)
-        connectedGatt?.writeCharacteristic(ledTypeCharacteristic)
+        gattWrapper?.wrappedWriteCharacteristic(ledTypeCharacteristic)
+
+        loadPreferenceMenu(value)
+
+        // Load new effect data
+        val newEffectCharacteristic = ledService?.getCharacteristic(Effects.effectIndexToUUID[typeIndex])
+        gattWrapper?.wrappedReadCharacteristic(newEffectCharacteristic)
     }
 
     override fun onFragmentPreferenceChanged(key: String, value: Boolean) {
-        if (connectedGatt != null) {
+        if (gattWrapper != null) {
             val offset = Effects.offsets[currentEffectId]!![key]!!
             currentEffectSettings!![offset] = if (value) 1 else 0
             currentEffectCharacteristic?.value = currentEffectSettings
-            connectedGatt?.writeCharacteristic(currentEffectCharacteristic)
+            gattWrapper?.wrappedWriteCharacteristic(currentEffectCharacteristic)
+//            connectedGatt?.executeReliableWrite()
         }
     }
-
-//    companion object {
-//        fun getLayoutIdFromTypeName(ledType: String?): Int {
-//            var subPreferencesId = R.xml.collar_effects_preferences_blink
-//            when (ledType) {
-//                "wave" -> subPreferencesId = R.xml.collar_effects_preferences_wave
-//            }
-//            return subPreferencesId
-//        }
-//    }
 }
 
 class CollarLoadingFragment : PreferenceFragmentCompat() {
@@ -313,34 +337,64 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.collar_effects_preferences, rootKey)
 
+        val currentEffect = arguments?.getString("currentEffect") ?: ""
+        if (currentEffect.isNotEmpty()) {
+            listenerUpdateEnabled = false
+            preferenceManager.sharedPreferences.edit().putString("led_type", currentEffect).apply()
+            listenerUpdateEnabled = true
+        }
+
         val subPreferences = arguments?.getInt("subPreferences") ?: 0
         if (subPreferences != 0) {
             val effectSettings = arguments?.getByteArray("effectSettings")
             if (effectSettings != null) {
                 when (subPreferences) {
-                    R.xml.collar_effects_preferences_blink -> {
+                    R.xml.collar_effects_preferences_blink,
+                    R.xml.collar_effects_preferences_wave,
+                    R.xml.collar_effects_preferences_color_wheel,
+                    R.xml.collar_effects_preferences_color_visualizer -> {
                         listenerUpdateEnabled = false
                         val preferences = preferenceManager.sharedPreferences.edit();
-                        val offsets = Effects.offsets[BLEConstants.LEDBlinkSettingsCharacteristic]!!
-                        val colorOffset = offsets["effect_color"]!!
-                        preferences.putInt(
-                            "effect_color",
-                            ColorUtilities.BytesRGB2BGR(
-                                effectSettings[colorOffset],
-                                effectSettings[colorOffset + 1],
-                                effectSettings[colorOffset + 2]
-                            )
-                        )
+                        val uuid = Effects.effectResourceToUUID[subPreferences]!!
+                        val offsets = Effects.offsets[uuid]!!
 
-                        preferences.putInt("effect_speed", effectSettings[offsets["effect_speed"]!!].toInt())
-                        preferences.putBoolean("effect_fade_in", effectSettings[offsets["effect_fade_in"]!!].toInt() != 0)
-                        preferences.putBoolean("effect_fade_out", effectSettings[offsets["effect_fade_out"]!!].toInt() != 0)
-                        preferences.putBoolean("effect_rainbow", effectSettings[offsets["effect_rainbow"]!!].toInt() != 0)
-                        preferences.putInt("effect_rainbow_speed", effectSettings[offsets["effect_rainbow_speed"]!!].toInt())
+                        offsets.forEach { (key, position) ->
+                            if (Effects.isColor(key)) {
+                                preferences.putInt(
+                                    key,
+                                    ColorUtilities.BytesRGB2BGR(
+                                        effectSettings[position],
+                                        effectSettings[position + 1],
+                                        effectSettings[position + 2]
+                                    )
+                                )
+                            } else if (Effects.isBoolean(key)) {
+                                preferences.putBoolean(key, effectSettings[position].toInt() != 0)
+                            } else {
+                                // Int
+                                preferences.putInt(key, effectSettings[position].toInt())
+                            }
+                        }
+
                         preferences.apply()
                         listenerUpdateEnabled = true
                     }
+                    else -> throw Exception()
                 }
+
+//                if (subPreferences == R.xml.collar_effects_preferences_color_visualizer) {
+                // Attach bluetooth stuff to service until the type gets changed again
+
+//        if (BLEService.needsPermissions(this)) {
+//            ActivityCompat.requestPermissions(
+//                this, BLEService.getPermissionList(), PERMISSION_REQUEST_RECORD_AUDIO
+//            )
+//        } else {
+////            BLEVisualizer.getInstance().start()
+//        }
+//                } else {
+//                    // Remove bluetooth device from service since we changed the effect type now
+//                }
             }
 
             addPreferencesFromResource(subPreferences)
@@ -357,6 +411,8 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
         super.onAttach(context)
         if (context is OnFragmentPreferenceChanged) {
             listener = context
+
+
         }
     }
 

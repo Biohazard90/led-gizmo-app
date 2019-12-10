@@ -15,13 +15,22 @@
     <string name="preference_color_1">Color 1</string>
     <string name="preference_color_2">Color 2</string>
     <string name="preference_color_3">Color 3</string>
+    <string name="preference_num_colors">Number of colors</string>
     <string name="preference_speed">Speed</string>
     <string name="preference_fade_in">Fade in</string>
     <string name="preference_fade_out">Fade out</string>
+    <string name="preference_brightness">Brightness</string>
+    <string name="preference_decay">Decay</string>
     <string name="preference_rainbow">Rainbow</string>
     <string name="preference_rainbow_cycle_speed">Rainbow cycle speed</string>
     <string name="preference_length">Length</string>
     <string name="effect_type_settings_blink">Blink settings</string>
     <string name="effect_type_settings_wave">Wave settings</string>
+    <string name="effect_type_settings_color_wheel">Color wheel settings</string>
+    <string name="effect_type_settings_visualizer">Visualizer settings</string>
 
+    <!-- Service -->
+    <string name="service_title">Doggy Visualizer</string>
+    <string name="service_content">Audio visualizer for collar</string>
+    <string name="service_stop">Stop visualizer</string>
 </resources>

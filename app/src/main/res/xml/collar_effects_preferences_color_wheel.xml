@@ -18,37 +18,18 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
-        android:title="@string/effect_type_settings_wave"
+        app:title="@string/effect_type_settings_color_wheel"
         app:iconSpaceReserved="false">
 
         <SeekBarPreference
             app:defaultValue="1"
-            app:key="effect_number_colors"
-            app:title="@string/preference_num_colors"
-            android:max="3"
+            app:key="effect_brightness"
+            app:title="@string/preference_brightness"
+            android:max="255"
             app:min="1"
             app:showSeekBarValue="true"
             app:iconSpaceReserved="false"
             />
-
-        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
-            app:defaultValue="0xFFFFFFFF"
-            app:key="effect_color_1"
-            app:title="@string/preference_color_1"
-            app:iconSpaceReserved="false" />
-
-        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
-            app:defaultValue="0xFFFFFFFF"
-            app:key="effect_color_2"
-            app:title="@string/preference_color_2"
-            app:iconSpaceReserved="false" />
-
-        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
-            app:defaultValue="0xFFFFFFFF"
-            app:key="effect_color_3"
-            app:title="@string/preference_color_3"
-            app:iconSpaceReserved="false" />
-
         <SeekBarPreference
             app:defaultValue="1"
             app:key="effect_speed"
@@ -62,26 +43,10 @@
             app:defaultValue="1"
             app:key="effect_length"
             app:title="@string/preference_length"
-            android:max="30"
+            android:max="100"
             app:min="1"
             app:showSeekBarValue="true"
             app:iconSpaceReserved="false"
-            />
-        <CheckBoxPreference
-            app:defaultValue="false"
-            app:key="effect_rainbow"
-            app:title="@string/preference_rainbow"
-            app:iconSpaceReserved="false"
-            />
-        <SeekBarPreference
-            app:defaultValue="1"
-            app:key="effect_rainbow_speed"
-            app:title="@string/preference_rainbow_cycle_speed"
-            android:max="30"
-            app:min="1"
-            app:showSeekBarValue="true"
-            app:iconSpaceReserved="false"
-            app:dependency="effect_rainbow"
             />
     </PreferenceCategory>
 </PreferenceScreen>

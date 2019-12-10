@@ -3,7 +3,7 @@
     <string-array name="led_type_entries">
         <item>Blink</item>
         <item>Wave</item>
-        <item>Wheel</item>
+        <item>Color Wheel</item>
         <item>Christmas</item>
         <item>Police</item>
         <item>Audio Visualizer</item>

@@ -36,6 +36,12 @@ class MainActivity : AppCompatActivity() {
     val knownCollars: MutableSet<String> = HashSet()
     var listInit = true
 
+    private val bleReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            scanLeDevice(false)
+        }
+    }
+
     //var content: View? = null
 
     private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
@@ -107,14 +113,23 @@ class MainActivity : AppCompatActivity() {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BLUETOOTH)
         }
+    }
 
-        registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                scanLeDevice(false)
-            }
-        }, IntentFilter("STOPSCANNER"))
-
+    override fun onStart() {
+        super.onStart()
+        registerReceiver(bleReceiver, IntentFilter("STOPSCANNER"))
         scanLeDevice(true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        registerReceiver(bleReceiver, IntentFilter("STOPSCANNER"))
+        scanLeDevice(true)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        unregisterReceiver(bleReceiver)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -190,7 +205,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onScanFailed(errorCode: Int) {
-            setListFailure();
+            runOnUiThread {
+                setListFailure();
+            }
         }
     }
 
