@@ -25,15 +25,6 @@ import java.util.*
 class BLEService : Service() {
 
     companion object {
-        //        private var instance: BLEVisualizer? = null
-//
-//        fun getInstance(): BLEVisualizer {
-//            if (instance == null) {
-//                instance = BLEVisualizer()
-//            }
-//            return instance!!
-//        }
-//
         val COMMAND_REGISTER_DEVICE = 1000
         val COMMAND_UNREGISTER_DEVICE = 1001
 
@@ -51,47 +42,9 @@ class BLEService : Service() {
                 MODIFY_AUDIO_SETTINGS
             )
         }
-
-//        fun moveToStartedState(context: Context) {
-//            val intent: Intent = Intent(context, BLEService::class.java) //MyIntentBuilder(context).setCommand(Command.STOP).build()
-//            intent.putExtra("cmd", 1)
-////        val intent: Intent = MyIntentBuilder(this).setCommand(Command.START).build()
-//            context.startForegroundService(intent)
-//        }
     }
 
-    //private var visualizer: Visualizer = Visualizer(0)
     private var notificationChannel: NotificationChannel? = null
-
-//    fun start() {
-//        if (!visualizer.enabled) {
-//            visualizer.setCaptureSize(64)
-//            visualizer.setDataCaptureListener(this, 20000, false, true)
-//            visualizer.enabled = true
-//        }
-//    }
-//
-//    fun stop() {
-//        if (visualizer.enabled) {
-//            visualizer.enabled = false
-//        }
-//    }
-
-    fun finalize() {
-//        stop()
-//        visualizer.release()
-    }
-
-//    override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
-//        val fftv0 = Math.abs(fft!![0].toInt())
-//        val count = fft.size
-//        Log.i("AUDIOVIS", "$count fft $fftv0")
-//    }
-//
-//    override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-//    }
-
-
     private var serviceLooper: Looper? = null
     private var serviceHandler: ServiceHandler? = null
     //    private val deviceLock: Lock = ReentrantLock()
@@ -146,9 +99,9 @@ class BLEService : Service() {
             private var fftFXLastTime: Long = 0
             private var fftFXFrametime: Float = 0.0f
 
-            override fun onWrappedServicesDiscovered(wrapper: BluetoothGattWrapper?, status: Int) {
+            override fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 connectedGatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
-                ledService = wrapper?.wrappedGetService(BLEConstants.LEDService)
+                ledService = gatt?.getService(BLEConstants.LEDService)
                 audioDataCharacteristic = ledService?.getCharacteristic(BLEConstants.AudioDataCharacteristic)
                 if (audioDataCharacteristic != null &&
                     !visualizer.enabled
@@ -184,21 +137,23 @@ class BLEService : Service() {
                 sum /= (end - start).toFloat()
 
                 if (min < fftFXBoundsLow[boundsIndex]) {
-                    fftFXBoundsLow[boundsIndex] = min
+                    //fftFXBoundsLow[boundsIndex] = min
+                    fftFXBoundsLow[boundsIndex] += (min - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime)
                 } else {
-                    fftFXBoundsLow[boundsIndex] += (min - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 20)
+                    fftFXBoundsLow[boundsIndex] += (min - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 0.1f)
                 }
 
                 if (max > fftFXBoundsHigh[boundsIndex]) {
-                    fftFXBoundsHigh[boundsIndex] = max
+                    //fftFXBoundsHigh[boundsIndex] = max
+                    fftFXBoundsHigh[boundsIndex] += (max - fftFXBoundsHigh[boundsIndex]) * Math.min(1.0f, fftFXFrametime)
                 } else {
-                    fftFXBoundsHigh[boundsIndex] += (max - fftFXBoundsHigh[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 20)
+                    fftFXBoundsHigh[boundsIndex] += (max - fftFXBoundsHigh[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 0.1f)
                 }
 
 //                Log.i("vis", "ar: " + boundsIndex + ", min: " + fftFXBoundsLow[boundsIndex] + ", max: " + fftFXBoundsHigh[boundsIndex])
 
-                if (sum >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * 0.3333 + fftFXBoundsLow[boundsIndex]) {
-                    return 1.0f
+                if (max >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * 0.9 + fftFXBoundsLow[boundsIndex]) {
+                        return 1.0f
                 } else {
                     return 0.0f
                 }
@@ -222,19 +177,21 @@ class BLEService : Service() {
                     fftFXLastTime = currentMillis
 
                     audioDataCharacteristic?.value = byteArrayOf(
-                        (sampleFFT(fft, 0, 0, 32).toDouble() * 255).toByte(),
-                        (sampleFFT(fft, 1, 32, 64).toDouble() * 255).toByte(),
-                        (sampleFFT(fft, 2, 64, 192).toDouble() * 255).toByte(),
-                        (sampleFFT(fft, 3, 192, 256).toDouble() * 255).toByte(),
+                        (sampleFFT(fft, 0, 0, 8).toDouble() * 255).toByte(),
+                        (sampleFFT(fft, 1, 8, 32).toDouble() * 255).toByte(),
+                        (sampleFFT(fft, 2, 32, 64).toDouble() * 255).toByte(),
+                        (sampleFFT(fft, 3, 64, 256).toDouble() * 255).toByte(),
                         (sampleFFT(fft, 4, 256, 512).toDouble() * 255).toByte()
                     )
                     wrappedWriteCharacteristic(audioDataCharacteristic)
 
-//                    var maxAmp = 0.0
-//                    for (i in 0..4) {
-//                        maxAmp = Math.max(maxAmp, fftFXBoundsHigh[i].toDouble())
+//                    var maxAmp = 0.0f
+//                    for (i in 0 until 5) {
+//                        maxAmp = Math.max(maxAmp, fftFXBoundsHigh[i])
 //                    }
-//                    fftFXBoundsHigh = FloatArray(FFT_FX_SIZE, { i -> maxAmp.toFloat() })
+//                    for (i in 0 until 5) {
+//                        fftFXBoundsHigh[i] = Math.max(fftFXBoundsHigh[i], maxAmp * 0.1f)
+//                    }
                 }
             }
 
@@ -315,223 +272,9 @@ class BLEService : Service() {
     }
 
     override fun onBind(intent: Intent): IBinder? {
-        // We don't provide binding, so return null
         return null
     }
 
     override fun onDestroy() {
-//        Toast.makeText(this, "service done", Toast.LENGTH_SHORT).show()
     }
-
-
-//    private fun commandStart() {
-//        if (!mServiceIsStarted) {
-//            moveToStartedState()
-//            return
-//        }
-//        if (mExecutor == null) {
-//            mTimeRunning_sec = 0
-//            if (isPreAndroidO()) {
-//                HandleNotifications.PreO.createNotification(this)
-//            } else {
-//                HandleNotifications.O.createNotification(this)
-//            }
-//            acquireWakeLock()
-//            mExecutor = Executors.newSingleThreadScheduledExecutor()
-//            val runnable = Runnable { recurringTask() }
-//            mExecutor.scheduleWithFixedDelay(runnable, DELAY_INITIAL, DELAY_RECURRING, DELAY_UNIT)
-//            d(TAG, "commandStart: starting executor")
-//        } else {
-//            d(TAG, "commandStart: do nothing")
-//        }
-//    }
-
-//    private var mExecutor: ScheduledExecutorService? = null
-//    private var mServiceIsStarted = false
-//
-//    inner class LocalBinder : Binder() {
-//        val service: BLEService
-//            get() = this@BLEService
-//    }
-//
-//    override fun onBind(intent: Intent?): IBinder? {
-//        return mBinder
-//    }
-//
-//    private val mBinder: IBinder = LocalBinder()
-//
-//    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-//        var cmd = intent?.extras?.getInt("cmd")
-//        mServiceIsStarted = true;
-//        when (cmd) {
-//            1 ->
-//                ServiceN.createNotification(this);
-//            2 ->
-//                mServiceIsStarted = false;
-//        }
-//        return START_STICKY
-////        return super.onStartCommand(intent, flags, startId)
-//    }
-//
-//    override fun onCreate() {
-//        super.onCreate()
-//    }
-//
-//    override fun onDestroy() {
-//        super.onDestroy()
-//    }
-
-
 }
-
-
-//object ServiceN {
-//
-//    /** PendingIntent to stop the service.  */
-//    private fun getStopServicePI(context: Service): PendingIntent? {
-//        var piStopService: PendingIntent?
-//            val iStopService: Intent = Intent(context, BLEService::class.java) //MyIntentBuilder(context).setCommand(Command.STOP).build()
-//            iStopService.putExtra("cmd", 2)
-//            piStopService = PendingIntent.getService(context, 0, iStopService, 0)
-//        return piStopService
-//    }
-//
-//    /** Get pending intent to launch the activity.  */
-//    private fun getLaunchActivityPI(context: Service): PendingIntent? {
-//        var piLaunchMainActivity: PendingIntent?
-//            val iLaunchMainActivity = Intent(context, MainActivity::class.java)
-//            piLaunchMainActivity = PendingIntent.getActivity(context, 0, iLaunchMainActivity, 0)
-//        return piLaunchMainActivity
-//    }
-//
-//    val CHANNEL_ID: String = "AV"
-//
-//    fun createNotification(context: Service) {
-//        val channelId = createChannel(context)
-//        val notification: Notification = buildNotification(context, channelId)
-//        context.startForeground(
-//            0, notification
-//        )
-//    }
-//
-//    private fun buildNotification(
-//        context: Service, channelId: String
-//    ): Notification { // Create Pending Intents.
-//        val piLaunchMainActivity: PendingIntent? = getLaunchActivityPI(context)
-//        val piStopService: PendingIntent? = getStopServicePI(context)
-//        // Action to stop the service.
-//        val stopAction: NotificationCompat.Action = NotificationCompat.Action.Builder(
-//            R.drawable.ic_pause_circle_filled_24px,
-//            context.getString(R.string.service_stop),
-//            piStopService
-//        )
-//            .build()
-//        // Create a notification.
-//        return NotificationCompat.Builder(context, channelId)
-//            .setContentTitle(context.getString(R.string.service_title))
-//            .setContentText(context.getString(R.string.service_content))
-//            .setSmallIcon(R.drawable.ic_equalizer_24px)
-//            .setContentIntent(piLaunchMainActivity)
-//            .addAction(stopAction)
-//            .setStyle(NotificationCompat.BigTextStyle())
-//            .build()
-//    }
-//
-//    private fun createChannel(ctx: Service): String { // Create a channel.
-//        val notificationManager =
-//            ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-//        val channelName: CharSequence = "Playback channel"
-//        val importance = NotificationManager.IMPORTANCE_DEFAULT
-//        val notificationChannel = NotificationChannel(
-//            CHANNEL_ID, channelName, importance
-//        )
-//        notificationManager.createNotificationChannel(
-//            notificationChannel
-//        )
-//        return CHANNEL_ID
-//    }
-//}
-
-//class HelloService : Service() {
-//
-//    private var serviceLooper: Looper? = null
-//    private var serviceHandler: ServiceHandler? = null
-//
-//    // Handler that receives messages from the thread
-//    private inner class ServiceHandler(looper: Looper) : Handler(looper) {
-//
-//        override fun handleMessage(msg: Message) {
-//            // Normally we would do some work here, like download a file.
-//            // For our sample, we just sleep for 5 seconds.
-//            try {
-//                Thread.sleep(5000)
-//            } catch (e: InterruptedException) {
-//                // Restore interrupt status.
-//                Thread.currentThread().interrupt()
-//            }
-//
-//            // Stop the service using the startId, so that we don't stop
-//            // the service in the middle of handling another job
-//            stopSelf(msg.arg1)
-//        }
-//    }
-//
-//    override fun onCreate() {
-//        // Start up the thread running the service.  Note that we create a
-//        // separate thread because the service normally runs in the process's
-//        // main thread, which we don't want to block.  We also make it
-//        // background priority so CPU-intensive work will not disrupt our UI.
-//        HandlerThread("ServiceStartArguments", THREAD_PRIORITY_BACKGROUND).apply {
-//            start()
-//
-//            // Get the HandlerThread's Looper and use it for our Handler
-//            serviceLooper = looper
-//            serviceHandler = ServiceHandler(looper)
-//        }
-//    }
-//
-//    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-//        Toast.makeText(this, "service starting", Toast.LENGTH_SHORT).show()
-//
-//        // For each start request, send a message to start a job and deliver the
-//        // start ID so we know which request we're stopping when we finish the job
-//        serviceHandler?.obtainMessage()?.also { msg ->
-//            msg.arg1 = startId
-//            serviceHandler?.sendMessage(msg)
-//        }
-//
-////        val pendingIntent: PendingIntent =
-////            Intent(this, MainActivity::class.java).let { notificationIntent ->
-////                PendingIntent.getActivity(this, 0, notificationIntent, 0)
-////            }
-//
-//        val androidChannel = NotificationChannel(
-//            "CHANNEL_DEFAULT_IMPORTANCE",
-//            "CHANNEL_DEFAULT_IMPORTANCE", NotificationManager.IMPORTANCE_DEFAULT
-//        )
-//
-//        val service = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-//        service.createNotificationChannel(androidChannel)
-//
-//        val notification: Notification = Notification.Builder(this, "CHANNEL_DEFAULT_IMPORTANCE")
-//            .setContentTitle(getText(R.string.service_title))
-//            .setContentText(getText(R.string.service_content))
-//            .setSmallIcon(R.drawable.ic_equalizer_24px)
-////            .setContentIntent(pendingIntent)
-//            .build()
-//
-//        startForeground(10, notification)
-//
-//        // If we get killed, after returning from here, restart
-//        return START_STICKY
-//    }
-//
-//    override fun onBind(intent: Intent): IBinder? {
-//        // We don't provide binding, so return null
-//        return null
-//    }
-//
-//    override fun onDestroy() {
-//        Toast.makeText(this, "service done", Toast.LENGTH_SHORT).show()
-//    }
-//}

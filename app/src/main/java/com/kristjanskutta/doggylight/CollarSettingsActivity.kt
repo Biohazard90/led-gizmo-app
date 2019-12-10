@@ -167,14 +167,13 @@ class CollarSettingsActivity : AppCompatActivity(),
     }
 
     var gattWrapper: BluetoothGattWrapper = object : BluetoothGattWrapper() {
-        override fun onWrappedServicesDiscovered(wrapper: BluetoothGattWrapper?, status: Int) {
-            ledService = wrapper?.wrappedGetService(BLEConstants.LEDService)
-            val ledTypeCharacteristic = ledService?.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
-            wrapper?.wrappedReadCharacteristic(ledTypeCharacteristic)
+        override fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            ledService = gatt!!.getService(BLEConstants.LEDService)
+            val ledTypeCharacteristic = ledService!!.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
+            wrappedReadCharacteristic(ledTypeCharacteristic)
         }
 
         override fun onWrappedCharacteristicRead(
-            wrapper: BluetoothGattWrapper?,
             characteristic: BluetoothGattCharacteristic?,
             status: Int
         ) {
@@ -186,7 +185,7 @@ class CollarSettingsActivity : AppCompatActivity(),
                 BLEConstants.LEDTypeCharacteristic -> {
                     val currentType = characteristic?.getIntValue(FORMAT_SINT32, 0) ?: 0
                     val effectUUID = Effects.effectIndexToUUID[currentType]
-                    wrapper?.wrappedReadCharacteristic(ledService?.getCharacteristic(effectUUID))
+                    wrappedReadCharacteristic(ledService?.getCharacteristic(effectUUID))
 
                     runOnUiThread {
                         loadPreferenceMenu(Effects.effectIndexToString[currentType]!!)

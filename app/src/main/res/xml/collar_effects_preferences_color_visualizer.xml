@@ -31,7 +31,7 @@
             app:iconSpaceReserved="false"
             />
         <SeekBarPreference
-            app:defaultValue="255"
+            app:defaultValue="1"
             app:key="effect_decay"
             app:title="@string/preference_decay"
             android:max="255"

@@ -8,7 +8,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.android.synthetic.main.collar_item.view.*
 
-class CollarsAdapter(val items : ArrayList<Collar>, val context: Context) : RecyclerView.Adapter<ViewHolder>()  {
+class CollarsAdapter(val items: ArrayList<Collar>, val context: Context) : RecyclerView.Adapter<ViewHolder>() {
 
     // Gets the number of animals in the list
     override fun getItemCount(): Int {
@@ -29,7 +29,7 @@ class CollarsAdapter(val items : ArrayList<Collar>, val context: Context) : Recy
     }
 }
 
-class ViewHolder (val context: Context, view: View) : RecyclerView.ViewHolder(view) {
+class ViewHolder(val context: Context, view: View) : RecyclerView.ViewHolder(view) {
     // Holds the TextView that will add each animal to
     val tvCollarName = view.tv_collar
     val tvChev = view.tv_chev
@@ -37,14 +37,16 @@ class ViewHolder (val context: Context, view: View) : RecyclerView.ViewHolder(vi
 
     init {
         view.setOnClickListener { v ->
-            val stopScannerIntent = Intent("STOPSCANNER")
-            context.sendBroadcast(stopScannerIntent)
+            if (collar?.device != null) {
+                val stopScannerIntent = Intent("STOPSCANNER")
+                context.sendBroadcast(stopScannerIntent)
 
-            val intent = Intent(context, CollarSettingsActivity::class.java).apply {
-                putExtra("collarName", collar?.name)
-                putExtra("collarDevice", collar?.device)
+                val intent = Intent(context, CollarSettingsActivity::class.java).apply {
+                    putExtra("collarName", collar?.name)
+                    putExtra("collarDevice", collar?.device)
+                }
+                context.startActivity(intent)
             }
-            context.startActivity(intent)
         }
     }
 }

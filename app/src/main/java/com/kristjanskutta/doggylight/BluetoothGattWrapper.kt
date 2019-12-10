@@ -6,7 +6,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
 
-    protected var connectedGatt: BluetoothGatt? = null
+    @Volatile protected var connectedGatt: BluetoothGatt? = null
 
     private class Command(val type: Int = 0, val characteristic: BluetoothGattCharacteristic) {
         override fun equals(other: Any?): Boolean {
@@ -26,6 +26,8 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
         ) {
             isQueueBusy = true
             val cmd = queue.remove()
+            lock.unlock()
+
             when (cmd.type) {
                 0 -> {
                     connectedGatt?.readCharacteristic(cmd.characteristic)
@@ -35,8 +37,9 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
                     connectedGatt?.writeCharacteristic(cmd.characteristic)
                 }
             }
+        } else {
+            lock.unlock()
         }
-        lock.unlock()
     }
 
     override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
@@ -62,7 +65,9 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
 
     override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
         super.onServicesDiscovered(gatt, status)
-        onWrappedServicesDiscovered(this, status)
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            onWrappedServicesDiscovered(gatt, status)
+        }
     }
 
     override fun onCharacteristicRead(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
@@ -71,7 +76,7 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
         isQueueBusy = false
         lock.unlock()
 
-        onWrappedCharacteristicRead(this, characteristic, status)
+        onWrappedCharacteristicRead(characteristic, status)
         processQueue()
     }
 
@@ -84,8 +89,8 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
         processQueue()
     }
 
-    open fun onWrappedServicesDiscovered(wrapper: BluetoothGattWrapper?, status: Int) {}
-    open fun onWrappedCharacteristicRead(wrapper: BluetoothGattWrapper?, characteristic: BluetoothGattCharacteristic?, status: Int) {}
+    open fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {}
+    open fun onWrappedCharacteristicRead(characteristic: BluetoothGattCharacteristic?, status: Int) {}
 
     open fun close() {
         connectedGatt?.close()
@@ -96,16 +101,21 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
     }
 
     fun wrappedReadCharacteristic(characteristic: BluetoothGattCharacteristic?) {
+        lock.lock()
         queue.add(Command(0, characteristic!!))
+        lock.unlock()
         processQueue()
     }
 
     fun wrappedWriteCharacteristic(characteristic: BluetoothGattCharacteristic?) {
         val newCommand = Command(1, characteristic!!)
+        lock.lock()
         if (queue.contains(newCommand)) {
+            lock.unlock()
             return
         }
         queue.add(newCommand)
+        lock.unlock()
         processQueue()
     }
 }
