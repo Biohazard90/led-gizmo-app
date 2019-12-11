@@ -3,10 +3,7 @@ package com.kristjanskutta.doggylight
 
 import android.Manifest.permission.MODIFY_AUDIO_SETTINGS
 import android.Manifest.permission.RECORD_AUDIO
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
+import android.app.*
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -17,9 +14,10 @@ import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
 import android.os.*
 import android.os.Process.THREAD_PRIORITY_BACKGROUND
-import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.*
+import java.util.concurrent.locks.Lock
+import java.util.concurrent.locks.ReentrantLock
 
 
 class BLEService : Service() {
@@ -47,8 +45,15 @@ class BLEService : Service() {
     private var notificationChannel: NotificationChannel? = null
     private var serviceLooper: Looper? = null
     private var serviceHandler: ServiceHandler? = null
-    //    private val deviceLock: Lock = ReentrantLock()
+    private val devicesLock: Lock = ReentrantLock()
     private val devices: Deque<BluetoothDevice> = LinkedList<BluetoothDevice>()
+
+    fun getDevices(): List<BluetoothDevice> {
+        devicesLock.lock()
+        val devicesCopy = devices.toList()
+        devicesLock.unlock()
+        return devicesCopy
+    }
 
     // Handler that receives messages from the thread
     private inner class ServiceHandler(looper: Looper, context: Context) : Handler(looper) {
@@ -72,12 +77,20 @@ class BLEService : Service() {
             val device: BluetoothDevice = msg.obj as BluetoothDevice
             when (msg.arg1) {
                 COMMAND_REGISTER_DEVICE -> {
-                    devices.add(device)
-                    device?.connectGatt(context, false, gattWrapper, BluetoothDevice.TRANSPORT_LE)
+                    devicesLock.lock()
+                    if (!devices.contains(device)) {
+                        devices.add(device)
+                    }
+                    devicesLock.unlock()
+
+                    device.connectGatt(context, false, gattWrapper, BluetoothDevice.TRANSPORT_LE)
                 }
 
                 COMMAND_UNREGISTER_DEVICE -> {
+                    devicesLock.lock()
                     devices.remove(device)
+                    devicesLock.unlock()
+
                     if (devices.isEmpty()) {
                         gattWrapper.close()
                         stopSelf()
@@ -103,15 +116,21 @@ class BLEService : Service() {
                 connectedGatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
                 ledService = gatt?.getService(BLEConstants.LEDService)
                 audioDataCharacteristic = ledService?.getCharacteristic(BLEConstants.AudioDataCharacteristic)
-                if (audioDataCharacteristic != null &&
-                    !visualizer.enabled
-                ) {
+                if (audioDataCharacteristic != null && !visualizer.enabled) {
                     val range = Visualizer.getCaptureSizeRange()
                     visualizer.captureSize = Math.max(range[0], Math.min(range[1], 1024))
                     visualizerRange = visualizer.captureSize
                     visualizer.setDataCaptureListener(this, Visualizer.getMaxCaptureRate(), false, true)
                     visualizer.enabled = true
                     fftFXLastTime = System.currentTimeMillis()
+                }
+            }
+
+            override fun onWrappedDisconnected(gatt: BluetoothGatt?) {
+                this@ServiceHandler.obtainMessage()?.also { msg ->
+                    msg.arg1 = BLEService.COMMAND_UNREGISTER_DEVICE
+                    msg.obj = gatt?.device
+                    serviceHandler?.sendMessage(msg)
                 }
             }
 
@@ -138,9 +157,9 @@ class BLEService : Service() {
 
                 if (min < fftFXBoundsLow[boundsIndex]) {
                     //fftFXBoundsLow[boundsIndex] = min
-                    fftFXBoundsLow[boundsIndex] += (min - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime)
+                    fftFXBoundsLow[boundsIndex] += (min - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 2)
                 } else {
-                    fftFXBoundsLow[boundsIndex] += (min - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 0.1f)
+                    fftFXBoundsLow[boundsIndex] += (min - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 0.2f)
                 }
 
                 if (max > fftFXBoundsHigh[boundsIndex]) {
@@ -150,15 +169,11 @@ class BLEService : Service() {
                     fftFXBoundsHigh[boundsIndex] += (max - fftFXBoundsHigh[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 0.1f)
                 }
 
-//                Log.i("vis", "ar: " + boundsIndex + ", min: " + fftFXBoundsLow[boundsIndex] + ", max: " + fftFXBoundsHigh[boundsIndex])
-
                 if (max >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * 0.9 + fftFXBoundsLow[boundsIndex]) {
-                        return 1.0f
+                    return 1.0f
                 } else {
                     return 0.0f
                 }
-
-                //return Math.sin(sum / (end - start) * Math.PI * 0.5).toFloat()
             }
 
             override fun onFftDataCapture(visualizer: Visualizer?, bytes: ByteArray?, samplingRate: Int) {
@@ -166,7 +181,7 @@ class BLEService : Service() {
 
                     val fft = FloatArray(bytes!!.size / 2)
                     for (i in fft.indices) {
-                        val real = bytes!![i * 2 + 0].toFloat() / 128.0f
+                        val real = bytes[i * 2 + 0].toFloat() / 128.0f
                         val imag = bytes[i * 2 + 1].toFloat() / 128.0f
                         fft[i] = (real * real + imag * imag)
                     }
@@ -241,10 +256,20 @@ class BLEService : Service() {
             serviceHandler?.sendMessage(msg)
         }
 
-//        val pendingIntent: PendingIntent =
-//            Intent(this, MainActivity::class.java).let { notificationIntent ->
+        var pendingIntent: PendingIntent? = null
+        if (shouldRegister) {
+            val device = intent.extras?.get(INTENT_KEY_DEVICE) as BluetoothDevice
+            pendingIntent = Intent(this, CollarSettingsActivity::class.java).let { notificationIntent ->
+                notificationIntent.putExtra("collarName", device.name!!)
+                notificationIntent.putExtra("collarDevice", device)
+                TaskStackBuilder.create(this)
+                    // add all of DetailsActivity's parents to the stack,
+                    // followed by DetailsActivity itself
+                    .addNextIntentWithParentStack(notificationIntent)
+                    .getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
 //                PendingIntent.getActivity(this, 0, notificationIntent, 0)
-//            }
+            }
+        }
 
         if (shouldRegister) {
             if (notificationChannel == null) {
@@ -262,7 +287,7 @@ class BLEService : Service() {
                 .setContentTitle(getText(R.string.service_title))
                 .setContentText(getText(R.string.service_content))
                 .setSmallIcon(R.drawable.ic_equalizer_24px)
-//            .setContentIntent(pendingIntent)
+                .setContentIntent(pendingIntent)
                 .build()
 
             startForeground(10, notification)
@@ -271,8 +296,14 @@ class BLEService : Service() {
         return START_NOT_STICKY
     }
 
+    inner class BLEBinder : Binder() {
+        fun getService(): BLEService = this@BLEService
+    }
+
+    val binder = BLEBinder()
+
     override fun onBind(intent: Intent): IBinder? {
-        return null
+        return binder
     }
 
     override fun onDestroy() {

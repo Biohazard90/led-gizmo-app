@@ -49,17 +49,19 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 // We successfully connected, proceed with service discovery
                 connectedGatt = gatt
-                gatt?.discoverServices();
+                gatt?.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 // We successfully disconnected on our own request
+                onWrappedDisconnected(gatt)
                 connectedGatt = null
                 gatt?.close();
             } else {
                 // We're CONNECTING or DISCONNECTING, ignore for now
             }
         } else {
+            onWrappedDisconnected(gatt)
             connectedGatt = null
-            gatt?.close();
+            gatt?.close()
         }
     }
 
@@ -91,6 +93,7 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
 
     open fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {}
     open fun onWrappedCharacteristicRead(characteristic: BluetoothGattCharacteristic?, status: Int) {}
+    open fun onWrappedDisconnected(gatt: BluetoothGatt?) {}
 
     open fun close() {
         connectedGatt?.close()

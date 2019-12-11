@@ -1,24 +1,24 @@
 package com.kristjanskutta.doggylight
 
-import android.Manifest
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.PendingIntent
-import android.bluetooth.*
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothDevice.TRANSPORT_LE
+import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGatt.GATT_SUCCESS
+import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattCharacteristic.FORMAT_SINT32
+import android.bluetooth.BluetoothGattService
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
+import androidx.core.app.NavUtils
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import java.util.*
-
+import android.app.*
 
 private const val TITLE_TAG = "settingsActivityTitle"
 
@@ -62,13 +62,6 @@ class CollarSettingsActivity : AppCompatActivity(),
         setTitle(name + " Settings")
 
 //        createPreferenceListener();
-    }
-
-    override fun onStart() {
-        super.onStart()
-
-        showLoadingMenu()
-        device?.connectGatt(this, false, gattWrapper, TRANSPORT_LE)
     }
 
     override fun onResume() {
@@ -161,8 +154,10 @@ class CollarSettingsActivity : AppCompatActivity(),
             return true
         } else {
             gattWrapper.close()
-            finish()
+//            finish()
+            NavUtils.navigateUpFromSameTask(this)
             return true
+//            return super.onSupportNavigateUp()
         }
     }
 
@@ -171,6 +166,21 @@ class CollarSettingsActivity : AppCompatActivity(),
             ledService = gatt!!.getService(BLEConstants.LEDService)
             val ledTypeCharacteristic = ledService!!.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
             wrappedReadCharacteristic(ledTypeCharacteristic)
+        }
+
+        override fun onWrappedDisconnected(gatt: BluetoothGatt?) {
+            runOnUiThread {
+                Toast.makeText(this@CollarSettingsActivity, getString(R.string.device_lost), Toast.LENGTH_SHORT).show()
+
+                val upIntent = Intent(applicationContext, MainActivity::class.java)
+                if (NavUtils.shouldUpRecreateTask(this@CollarSettingsActivity, upIntent)) {
+                    TaskStackBuilder.create(this@CollarSettingsActivity).addNextIntentWithParentStack(upIntent).startActivities()
+                } else {
+                    upIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    startActivity(upIntent)
+                    finish()
+                }
+            }
         }
 
         override fun onWrappedCharacteristicRead(
@@ -195,7 +205,8 @@ class CollarSettingsActivity : AppCompatActivity(),
                 BLEConstants.LEDBlinkSettingsCharacteristic,
                 BLEConstants.LEDWaveSettingsCharacteristic,
                 BLEConstants.LEDColorWheelSettingsCharacteristic,
-                BLEConstants.LEDVisualizerSettingsCharacteristic -> {
+                BLEConstants.LEDVisualizerSettingsCharacteristic,
+                BLEConstants.LEDVisorSettingsCharacteristic -> {
                     val value = characteristic?.value!!
                     runOnUiThread {
                         currentEffectCharacteristic = characteristic
@@ -351,7 +362,8 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                     R.xml.collar_effects_preferences_blink,
                     R.xml.collar_effects_preferences_wave,
                     R.xml.collar_effects_preferences_color_wheel,
-                    R.xml.collar_effects_preferences_color_visualizer -> {
+                    R.xml.collar_effects_preferences_color_visualizer,
+                    R.xml.collar_effects_preferences_visor -> {
                         listenerUpdateEnabled = false
                         val preferences = preferenceManager.sharedPreferences.edit();
                         val uuid = Effects.effectResourceToUUID[subPreferences]!!

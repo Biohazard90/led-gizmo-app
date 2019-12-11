@@ -2,19 +2,14 @@ package com.kristjanskutta.doggylight
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
 import android.content.pm.PackageManager
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.ParcelUuid
+import android.os.*
 import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
@@ -31,6 +26,7 @@ class MainActivity : AppCompatActivity() {
     private val REQUEST_ENABLE_BLUETOOTH = 1337
     private val PERMISSION_REQUEST_ALL = 5001
     private val handler: Handler = Handler(Looper.getMainLooper())
+    private var bleBinder: BLEService.BLEBinder? = null
 
     val collars: ArrayList<Collar> = ArrayList()
     val knownCollars: MutableSet<String> = HashSet()
@@ -41,8 +37,6 @@ class MainActivity : AppCompatActivity() {
             scanLeDevice(false)
         }
     }
-
-    //var content: View? = null
 
     private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -115,21 +109,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        registerReceiver(bleReceiver, IntentFilter("STOPSCANNER"))
-        scanLeDevice(true)
-    }
+//    override fun onStart() {
+//        super.onStart()
+//        registerReceiver(bleReceiver, IntentFilter("STOPSCANNER"))
+//        scanLeDevice(true)
+//
+//        val bindIntent = Intent(this, BLEService::class.java)
+//        bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+//    }
 
     override fun onResume() {
         super.onResume()
+        bleBinder = null
         registerReceiver(bleReceiver, IntentFilter("STOPSCANNER"))
         scanLeDevice(true)
+
+        val bindIntent = Intent(this, BLEService::class.java)
+        bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 
     override fun onPause() {
-        super.onPause()
+        scanLeDevice(false)
         unregisterReceiver(bleReceiver)
+        unbindService(serviceConnection)
+        super.onPause()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -167,12 +170,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun addFoundCollar(device: BluetoothDevice, connected: Boolean) {
+        if (listInit) {
+            listInit = false
+            knownCollars.clear()
+            collars.clear()
+        }
+
+        knownCollars.add(device.address)
+
+        val nCollar = Collar(device, device.name!!, connected)
+        collars.add(nCollar)
+        rv_collars.adapter?.notifyDataSetChanged()
+    }
+
+    private fun addConnectedCollars(): Boolean {
+        if (bleBinder == null) {
+            return false
+        }
+
+        val connectedCollars = bleBinder?.getService()?.getDevices()!!
+        for (collar in connectedCollars) {
+            addFoundCollar(collar, true)
+        }
+
+        return !connectedCollars.isEmpty()
+    }
+
     private val mLeScanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            if (result?.scanRecord == null ||
-                result?.device == null ||
-                result?.device?.name == null
-            ) {
+            if (result?.scanRecord == null || result?.device == null || result?.device?.name == null) {
                 return
             }
 
@@ -182,22 +209,12 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            if (result.scanRecord?.serviceUuids?.contains(ParcelUuid(BLEConstants.LEDService)) != true
-            ) {
+            if (result.scanRecord?.serviceUuids?.contains(ParcelUuid(BLEConstants.LEDService)) != true) {
                 return
             }
 
             if (callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES) {
-                if (listInit) {
-                    listInit = false
-                    collars.clear()
-                }
-
-                knownCollars.add(device.address)
-
-                val nCollar = Collar(device, device.name!!)
-                collars.add(nCollar)
-                rv_collars.adapter?.notifyDataSetChanged()
+                addFoundCollar(device, false)
             }
         }
 
@@ -206,7 +223,7 @@ class MainActivity : AppCompatActivity() {
 
         override fun onScanFailed(errorCode: Int) {
             runOnUiThread {
-                setListFailure();
+                setListFailure()
             }
         }
     }
@@ -215,11 +232,11 @@ class MainActivity : AppCompatActivity() {
     private var lastScanIndex = 0
     private fun scanLeDevice(enable: Boolean) {
         if (bluetoothAdapter == null) {
-            return;
+            return
         }
 
         if (mScanning) {
-            return;
+            return
         }
 
         val bluetoothLeScanner = bluetoothAdapter!!.bluetoothLeScanner
@@ -233,24 +250,45 @@ class MainActivity : AppCompatActivity() {
             }, SCAN_PERIOD)
             mScanning = true
             bluetoothLeScanner.startScan(mLeScanCallback)
-            setListSearching();
+
+//            val connectedDevices = .devices()
+            setListSearching()
+            addConnectedCollars()
         } else {
             mScanning = false
             bluetoothLeScanner.stopScan(mLeScanCallback)
         }
     }
 
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(
+            name: ComponentName?,
+            binder: IBinder?
+        ) {
+            bleBinder = binder as BLEService.BLEBinder
+            addConnectedCollars()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            bleBinder = null
+        }
+    }
+
     private fun setListSearching() {
         listInit = true
+        knownCollars.clear()
         collars.clear()
-        collars.add(Collar(null, getString(R.string.device_searching)))
+        collars.add(Collar(null, getString(R.string.device_searching), false))
         rv_collars.adapter?.notifyDataSetChanged()
     }
 
     private fun setListFailure() {
-        listInit = true
-        collars.clear()
-        collars.add(Collar(null, getString(R.string.device_nothing_found)))
-        rv_collars.adapter?.notifyDataSetChanged()
+        if (listInit) {
+            listInit = false
+            knownCollars.clear()
+            collars.clear()
+            collars.add(Collar(null, getString(R.string.device_nothing_found), false))
+            rv_collars.adapter?.notifyDataSetChanged()
+        }
     }
 }

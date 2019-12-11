@@ -5,6 +5,8 @@
     <string name="device_nothing_found">No Collars found!</string>
     <string name="confirm">OK</string>
     <string name="cancel">Cancel</string>
+    <string name="connected">(connected)</string>
+    <string name="device_lost">Device lost</string>
 
     <!-- Collar Preferences -->
     <string name="led_type_title">LED Effect Type</string>

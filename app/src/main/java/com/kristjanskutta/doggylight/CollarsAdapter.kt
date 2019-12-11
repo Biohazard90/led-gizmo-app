@@ -24,7 +24,8 @@ class CollarsAdapter(val items: ArrayList<Collar>, val context: Context) : Recyc
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val collar = items.get(position)
         holder?.tvCollarName?.text = collar.name
-        holder?.tvChev?.visibility = if (collar.device != null) View.VISIBLE else View.INVISIBLE
+        holder?.imgChev?.visibility = if (collar.device != null) View.VISIBLE else View.GONE
+        holder?.tvStatus?.visibility = if (collar.connected) View.VISIBLE else View.GONE
         holder?.collar = collar
     }
 }
@@ -32,7 +33,8 @@ class CollarsAdapter(val items: ArrayList<Collar>, val context: Context) : Recyc
 class ViewHolder(val context: Context, view: View) : RecyclerView.ViewHolder(view) {
     // Holds the TextView that will add each animal to
     val tvCollarName = view.tv_collar
-    val tvChev = view.tv_chev
+    val imgChev = view.img_chev
+    val tvStatus = view.tv_status
     var collar: Collar? = null
 
     init {
