@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Doggy Light</string>
     <string name="action_settings">Settings</string>
+    <string name="action_reset">Reset</string>
     <string name="device_searching">Searching Collars…</string>
     <string name="device_nothing_found">No Collars found!</string>
     <string name="confirm">OK</string>

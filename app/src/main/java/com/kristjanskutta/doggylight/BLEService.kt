@@ -135,7 +135,9 @@ class BLEService : Service() {
             }
 
             override fun close() {
-                visualizer.enabled = false
+                if (visualizer.enabled) {
+                    visualizer.enabled = false
+                }
                 visualizer.release()
                 audioDataCharacteristic = null
                 ledService = null

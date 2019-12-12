@@ -19,6 +19,9 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import java.util.*
 import android.app.*
+import android.bluetooth.BluetoothGattCharacteristic.FORMAT_UINT8
+import android.view.Menu
+import android.view.MenuItem
 
 private const val TITLE_TAG = "settingsActivityTitle"
 
@@ -39,6 +42,7 @@ class CollarSettingsActivity : AppCompatActivity(),
     var currentEffectCharacteristic: BluetoothGattCharacteristic? = null
     var currentEffectId: UUID? = null
     var currentEffectSettings: ByteArray? = null
+    var lastResetCall = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +78,33 @@ class CollarSettingsActivity : AppCompatActivity(),
     override fun onPause() {
         super.onPause()
         gattWrapper.close()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        menuInflater.inflate(R.menu.menu_collar, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_reset -> {
+                val effectIndex = Effects.effectUUIDToIndex[currentEffectId]!!
+                val fnResetCharacteristic = ledService?.getCharacteristic(BLEConstants.FnResetCharacteristic)
+                val newValue = byteArrayOf((++lastResetCall).toByte(), effectIndex.toByte())
+                fnResetCharacteristic?.setValue(newValue)
+                gattWrapper.wrappedWriteCharacteristic(fnResetCharacteristic)
+
+                if (lastResetCall > 255) {
+                    lastResetCall = 1
+                }
+
+                loadPreferenceMenu(Effects.effectIndexToString[effectIndex]!!)
+                gattWrapper.wrappedReadCharacteristic(currentEffectCharacteristic)
+                return true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -252,11 +283,17 @@ class CollarSettingsActivity : AppCompatActivity(),
             if (isColor) {
                 val convertedValue = ColorUtilities.BGR2RGB(value);
                 val offset = Effects.offsets[currentEffectId]!![key]!!
+                if (offset + 2 >= currentEffectSettings!!.size) {
+                    throw ArrayIndexOutOfBoundsException()
+                }
                 currentEffectSettings!![offset] = (convertedValue and 0xFF).toByte()
                 currentEffectSettings!![offset + 1] = (convertedValue shr 8 and 0xFF).toByte()
                 currentEffectSettings!![offset + 2] = (convertedValue shr 16 and 0xFF).toByte()
             } else {
                 val offset = Effects.offsets[currentEffectId]!![key]!!
+                if (offset >= currentEffectSettings!!.size) {
+                    throw ArrayIndexOutOfBoundsException()
+                }
                 currentEffectSettings!![offset] = value.toByte()
             }
 
@@ -275,7 +312,7 @@ class CollarSettingsActivity : AppCompatActivity(),
 
         // Update LED type on device
         val ledTypeCharacteristic = ledService?.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
-        ledTypeCharacteristic?.setValue(typeIndex, FORMAT_SINT32, 0)
+        ledTypeCharacteristic?.setValue(typeIndex, FORMAT_UINT8, 0)
         gattWrapper?.wrappedWriteCharacteristic(ledTypeCharacteristic)
 
         loadPreferenceMenu(value)
@@ -288,6 +325,9 @@ class CollarSettingsActivity : AppCompatActivity(),
     override fun onFragmentPreferenceChanged(key: String, value: Boolean) {
         if (gattWrapper != null) {
             val offset = Effects.offsets[currentEffectId]!![key]!!
+            if (offset >= currentEffectSettings!!.size) {
+                throw ArrayIndexOutOfBoundsException()
+            }
             currentEffectSettings!![offset] = if (value) 1 else 0
             currentEffectCharacteristic?.value = currentEffectSettings
             gattWrapper?.wrappedWriteCharacteristic(currentEffectCharacteristic)
@@ -383,7 +423,7 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                                 preferences.putBoolean(key, effectSettings[position].toInt() != 0)
                             } else {
                                 // Int
-                                preferences.putInt(key, effectSettings[position].toInt())
+                                preferences.putInt(key, effectSettings[position].toUByte().toInt())
                             }
                         }
 

@@ -88,6 +88,14 @@ object Effects {
         BLEConstants.LEDVisorSettingsCharacteristic to R.xml.collar_effects_preferences_visor
     )
 
+    val effectUUIDToIndex = hashMapOf(
+        BLEConstants.LEDBlinkSettingsCharacteristic to 0,
+        BLEConstants.LEDWaveSettingsCharacteristic to 1,
+        BLEConstants.LEDColorWheelSettingsCharacteristic to 2,
+        BLEConstants.LEDVisualizerSettingsCharacteristic to 3,
+        BLEConstants.LEDVisorSettingsCharacteristic to 4
+    )
+
     val effectResourceToUUID = hashMapOf(
         R.xml.collar_effects_preferences_blink to BLEConstants.LEDBlinkSettingsCharacteristic,
         R.xml.collar_effects_preferences_wave to BLEConstants.LEDWaveSettingsCharacteristic,
