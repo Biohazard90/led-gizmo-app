@@ -403,8 +403,8 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                 when (subPreferences) {
                     R.xml.collar_effects_preferences_blink,
                     R.xml.collar_effects_preferences_wave,
-                    R.xml.collar_effects_preferences_color_wheel,
-                    R.xml.collar_effects_preferences_color_visualizer,
+                    R.xml.collar_effects_preferences_wheel,
+                    R.xml.collar_effects_preferences_visualizer,
                     R.xml.collar_effects_preferences_visor,
                     R.xml.collar_effects_preferences_police,
                     R.xml.collar_effects_preferences_christmas -> {
@@ -437,7 +437,7 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                     else -> throw Exception()
                 }
 
-//                if (subPreferences == R.xml.collar_effects_preferences_color_visualizer) {
+//                if (subPreferences == R.xml.collar_effects_preferences_visualizer) {
                 // Attach bluetooth stuff to service until the type gets changed again
 
 //        if (BLEService.needsPermissions(this)) {

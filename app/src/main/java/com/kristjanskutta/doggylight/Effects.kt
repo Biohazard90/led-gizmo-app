@@ -48,7 +48,8 @@ object Effects {
             "effect_color_1" to 0,
             "effect_color_2" to 3,
             "effect_color_3" to 6,
-            "effect_speed" to 9
+            "effect_speed" to 9,
+            "effect_decay" to 10
         )
     )
 
@@ -98,8 +99,8 @@ object Effects {
     val effectUUIDToResource = hashMapOf(
         BLEConstants.LEDBlinkSettingsCharacteristic to R.xml.collar_effects_preferences_blink,
         BLEConstants.LEDWaveSettingsCharacteristic to R.xml.collar_effects_preferences_wave,
-        BLEConstants.LEDColorWheelSettingsCharacteristic to R.xml.collar_effects_preferences_color_wheel,
-        BLEConstants.LEDVisualizerSettingsCharacteristic to R.xml.collar_effects_preferences_color_visualizer,
+        BLEConstants.LEDColorWheelSettingsCharacteristic to R.xml.collar_effects_preferences_wheel,
+        BLEConstants.LEDVisualizerSettingsCharacteristic to R.xml.collar_effects_preferences_visualizer,
         BLEConstants.LEDVisorSettingsCharacteristic to R.xml.collar_effects_preferences_visor,
         BLEConstants.LEDPoliceSettingsCharacteristic to R.xml.collar_effects_preferences_police,
         BLEConstants.LEDChristmasSettingsCharacteristic to R.xml.collar_effects_preferences_christmas
@@ -118,8 +119,8 @@ object Effects {
     val effectResourceToUUID = hashMapOf(
         R.xml.collar_effects_preferences_blink to BLEConstants.LEDBlinkSettingsCharacteristic,
         R.xml.collar_effects_preferences_wave to BLEConstants.LEDWaveSettingsCharacteristic,
-        R.xml.collar_effects_preferences_color_wheel to BLEConstants.LEDColorWheelSettingsCharacteristic,
-        R.xml.collar_effects_preferences_color_visualizer to BLEConstants.LEDVisualizerSettingsCharacteristic,
+        R.xml.collar_effects_preferences_wheel to BLEConstants.LEDColorWheelSettingsCharacteristic,
+        R.xml.collar_effects_preferences_visualizer to BLEConstants.LEDVisualizerSettingsCharacteristic,
         R.xml.collar_effects_preferences_visor to BLEConstants.LEDVisorSettingsCharacteristic,
         R.xml.collar_effects_preferences_police to BLEConstants.LEDPoliceSettingsCharacteristic,
         R.xml.collar_effects_preferences_christmas to BLEConstants.LEDChristmasSettingsCharacteristic

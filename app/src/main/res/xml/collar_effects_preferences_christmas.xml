@@ -48,5 +48,15 @@
             app:showSeekBarValue="true"
             app:iconSpaceReserved="false"
             />
+
+        <SeekBarPreference
+            app:defaultValue="1"
+            app:key="effect_decay"
+            app:title="@string/preference_decay"
+            android:max="255"
+            app:min="1"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            />
     </PreferenceCategory>
 </PreferenceScreen>
