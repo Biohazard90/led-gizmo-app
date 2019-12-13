@@ -237,7 +237,9 @@ class CollarSettingsActivity : AppCompatActivity(),
                 BLEConstants.LEDWaveSettingsCharacteristic,
                 BLEConstants.LEDColorWheelSettingsCharacteristic,
                 BLEConstants.LEDVisualizerSettingsCharacteristic,
-                BLEConstants.LEDVisorSettingsCharacteristic -> {
+                BLEConstants.LEDVisorSettingsCharacteristic,
+                BLEConstants.LEDPoliceSettingsCharacteristic,
+                BLEConstants.LEDChristmasSettingsCharacteristic -> {
                     val value = characteristic?.value!!
                     runOnUiThread {
                         currentEffectCharacteristic = characteristic
@@ -403,7 +405,9 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                     R.xml.collar_effects_preferences_wave,
                     R.xml.collar_effects_preferences_color_wheel,
                     R.xml.collar_effects_preferences_color_visualizer,
-                    R.xml.collar_effects_preferences_visor -> {
+                    R.xml.collar_effects_preferences_visor,
+                    R.xml.collar_effects_preferences_police,
+                    R.xml.collar_effects_preferences_christmas -> {
                         listenerUpdateEnabled = false
                         val preferences = preferenceManager.sharedPreferences.edit();
                         val uuid = Effects.effectResourceToUUID[subPreferences]!!

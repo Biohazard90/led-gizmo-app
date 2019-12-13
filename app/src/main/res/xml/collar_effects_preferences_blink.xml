@@ -37,19 +37,19 @@
             app:showSeekBarValue="true"
             app:iconSpaceReserved="false"
             />
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             app:defaultValue="true"
             app:key="effect_fade_in"
             app:title="@string/preference_fade_in"
             app:iconSpaceReserved="false"
             />
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             app:defaultValue="true"
             app:key="effect_fade_out"
             app:title="@string/preference_fade_out"
             app:iconSpaceReserved="false"
             />
-        <CheckBoxPreference
+        <SwitchPreferenceCompat
             app:defaultValue="false"
             app:key="effect_rainbow"
             app:title="@string/preference_rainbow"

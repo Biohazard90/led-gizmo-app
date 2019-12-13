@@ -5,8 +5,8 @@
         <item>Wave</item>
         <item>Color Wheel</item>
         <item>Visor</item>
-        <item>Christmas</item>
         <item>Police</item>
+        <item>Christmas</item>
         <item>Audio Visualizer</item>
     </string-array>
 
@@ -15,8 +15,8 @@
         <item>wave</item>
         <item>wheel</item>
         <item>visor</item>
-        <item>christmas</item>
         <item>police</item>
+        <item>christmas</item>
         <item>visualizer</item>
     </string-array>
 </resources>
