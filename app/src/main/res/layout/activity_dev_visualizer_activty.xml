@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     tools:context=".DevVisualizerActivity">
 
-    <com.kristjanskutta.doggylight.VisualizerTestView
+    <com.kristjanskutta.gizmoled.VisualizerTestView
         android:id="@+id/view_visualizer"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />

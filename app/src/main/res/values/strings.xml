@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Doggy Light</string>
+    <string name="app_name">Gizmo LED</string>
     <string name="action_settings">Settings</string>
     <string name="action_dev_test_visualizer">DEV Test Visualizer</string>
     <string name="action_reset">Reset</string>
@@ -34,7 +34,7 @@
     <string name="effect_type_settings_visualizer">Visualizer settings</string>
 
     <!-- Service -->
-    <string name="service_title">Doggy Visualizer</string>
+    <string name="service_title">LED Visualizer</string>
     <string name="service_content">Audio visualizer for LEDs</string>
     <string name="service_stop">Stop visualizer</string>
 </resources>

@@ -1,4 +1,4 @@
-package com.kristjanskutta.doggylight
+package com.kristjanskutta.gizmoled
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothDevice.TRANSPORT_LE

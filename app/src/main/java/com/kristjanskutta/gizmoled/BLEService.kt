@@ -1,4 +1,4 @@
-package com.kristjanskutta.doggylight
+package com.kristjanskutta.gizmoled
 
 
 import android.Manifest.permission.MODIFY_AUDIO_SETTINGS
@@ -15,7 +15,6 @@ import android.media.audiofx.Visualizer
 import android.media.audiofx.Visualizer.MEASUREMENT_MODE_PEAK_RMS
 import android.os.*
 import android.os.Process.THREAD_PRIORITY_BACKGROUND
-import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.*
 import java.util.concurrent.locks.Lock
@@ -156,7 +155,7 @@ class BLEService : Service() {
 
             private var listeners = HashSet<AudioListener>()
 
-            private var visualizer: Visualizer = Visualizer(0)
+            private var visualizer: Visualizer? = null
             private var visualizerRange: Int = 1
             private var fftFXBoundsLow = FloatArray(FFT_FX_SIZE, { i -> 0.0f })
             private var fftFXBoundsHigh = FloatArray(FFT_FX_SIZE, { i -> 0.0f })
@@ -165,6 +164,9 @@ class BLEService : Service() {
             private var fftFXFrametime: Float = 0.0f
 
             override fun addListener(listener: AudioListener) {
+                if (visualizer == null) {
+                    visualizer = Visualizer(0)
+                }
                 listeners.add(listener)
                 if (listeners.size == 1) {
                     beginCapture()
@@ -185,24 +187,24 @@ class BLEService : Service() {
 
             override fun shutdown() {
                 removeAllListeners()
-                visualizer.release()
+                visualizer?.release()
             }
 
             fun beginCapture() {
-                if (!visualizer.enabled) {
+                if (visualizer != null && !visualizer!!.enabled) {
                     val range = Visualizer.getCaptureSizeRange()
-                    visualizer.captureSize = Math.max(range[0], Math.min(range[1], 1024))
-                    visualizerRange = visualizer.captureSize
-                    visualizer.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
-                    visualizer.setDataCaptureListener(this, Visualizer.getMaxCaptureRate(), false, true)
-                    visualizer.enabled = true
+                    visualizer!!.captureSize = Math.max(range[0], Math.min(range[1], 1024))
+                    visualizerRange = visualizer!!.captureSize
+                    visualizer!!.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
+                    visualizer!!.setDataCaptureListener(this, Visualizer.getMaxCaptureRate(), false, true)
+                    visualizer!!.enabled = true
                     fftFXLastTime = System.currentTimeMillis()
                 }
             }
 
             fun endCapture() {
-                if (visualizer.enabled) {
-                    visualizer.enabled = false
+                if (visualizer != null && visualizer!!.enabled) {
+                    visualizer!!.enabled = false
                 }
             }
 

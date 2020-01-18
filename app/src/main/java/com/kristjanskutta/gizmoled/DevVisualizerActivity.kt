@@ -1,4 +1,4 @@
-package com.kristjanskutta.doggylight
+package com.kristjanskutta.gizmoled
 
 import android.content.Context
 import android.content.Intent

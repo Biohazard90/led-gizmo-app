@@ -1,4 +1,4 @@
-package com.kristjanskutta.doggylight
+package com.kristjanskutta.gizmoled
 
 object ColorUtilities {
     fun BGR2RGB(value: Int): Int {

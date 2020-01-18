@@ -1,4 +1,4 @@
-package com.kristjanskutta.doggylight
+package com.kristjanskutta.gizmoled
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter

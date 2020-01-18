@@ -1,2 +1,2 @@
 include ':app'
-rootProject.name='DoggyLight'
+rootProject.name='GizmoLED'
