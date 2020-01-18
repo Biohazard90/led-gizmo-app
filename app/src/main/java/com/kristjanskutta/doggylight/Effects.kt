@@ -26,8 +26,13 @@ object Effects {
             "effect_length" to 2
         ),
         BLEConstants.LEDVisualizerSettingsCharacteristic to hashMapOf(
-            "effect_brightness" to 0,
-            "effect_decay" to 1
+            "effect_color_1" to 0,
+            "effect_color_2" to 3,
+            "effect_brightness" to 6,
+            "effect_decay" to 7,
+            "effect_speed" to 8,
+            "effect_rainbow" to 9,
+            "effect_rainbow_speed" to 10
         ),
         BLEConstants.LEDVisorSettingsCharacteristic to hashMapOf(
             "effect_color_1" to 0,

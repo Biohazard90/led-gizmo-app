@@ -8,4 +8,9 @@
         android:title="@string/action_settings"
         android:visible="false"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/action_test_visualizer"
+        android:orderInCategory="100"
+        android:title="@string/action_dev_test_visualizer"
+        app:showAsAction="never" />
 </menu>

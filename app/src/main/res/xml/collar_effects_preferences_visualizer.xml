@@ -21,6 +21,17 @@
         app:title="@string/effect_type_settings_visualizer"
         app:iconSpaceReserved="false">
 
+        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
+            app:defaultValue="0xFFFFFFFF"
+            app:key="effect_color_1"
+            app:title="@string/preference_color_1"
+            app:iconSpaceReserved="false" />
+
+        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
+            app:defaultValue="0xFFFFFFFF"
+            app:key="effect_color_2"
+            app:title="@string/preference_color_2"
+            app:iconSpaceReserved="false" />
         <SeekBarPreference
             app:defaultValue="1"
             app:key="effect_brightness"
@@ -38,6 +49,31 @@
             app:min="1"
             app:showSeekBarValue="true"
             app:iconSpaceReserved="false"
+            />
+        <SeekBarPreference
+            app:defaultValue="0"
+            app:key="effect_speed"
+            app:title="@string/preference_speed"
+            android:max="30"
+            app:min="0"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            />
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="effect_rainbow"
+            app:title="@string/preference_rainbow"
+            app:iconSpaceReserved="false"
+            />
+        <SeekBarPreference
+            app:defaultValue="1"
+            app:key="effect_rainbow_speed"
+            app:title="@string/preference_rainbow_cycle_speed"
+            android:max="30"
+            app:min="1"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"
+            app:dependency="effect_rainbow"
             />
     </PreferenceCategory>
 </PreferenceScreen>

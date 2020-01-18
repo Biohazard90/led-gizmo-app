@@ -81,11 +81,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         addDevice.setOnClickListener { view ->
-            if (mScanning) {
-                scanLeDevice(false)
-            }
-            knownCollars.clear()
-            collars.clear()
+            stopScanningAndClear()
             scanLeDevice(true)
         }
 
@@ -166,6 +162,12 @@ class MainActivity : AppCompatActivity() {
 
         return when (item.itemId) {
             R.id.action_settings -> true
+            R.id.action_test_visualizer -> {
+                stopScanningAndClear()
+                val intent = Intent(this, DevVisualizerActivity::class.java)
+                startActivity(intent)
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -195,6 +197,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         return !connectedCollars.isEmpty()
+    }
+
+    private fun stopScanningAndClear() {
+        if (mScanning) {
+            scanLeDevice(false)
+        }
+        knownCollars.clear()
+        collars.clear()
     }
 
     private val mLeScanCallback: ScanCallback = object : ScanCallback() {
