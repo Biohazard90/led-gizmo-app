@@ -12,14 +12,18 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
-import android.media.audiofx.Visualizer.MEASUREMENT_MODE_PEAK_RMS
 import android.os.*
 import android.os.Process.THREAD_PRIORITY_BACKGROUND
+import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.*
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.collections.HashSet
+import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 
 
 interface AudioListener {
@@ -46,8 +50,14 @@ class BLEService : Service() {
         val INTENT_KEY_CALLBACK = "callback"
 
         fun needsPermissions(context: Context): Boolean {
-            return ContextCompat.checkSelfPermission(context, RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
-                    ContextCompat.checkSelfPermission(context, MODIFY_AUDIO_SETTINGS) != PackageManager.PERMISSION_GRANTED
+            return ContextCompat.checkSelfPermission(
+                context,
+                RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED ||
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        MODIFY_AUDIO_SETTINGS
+                    ) != PackageManager.PERMISSION_GRANTED
         }
 
         fun getPermissionList(): Array<String> {
@@ -116,10 +126,11 @@ class BLEService : Service() {
                 COMMAND_UNREGISTER_DEVICE -> {
                     val device: BluetoothDevice = msg.obj as BluetoothDevice
                     devicesLock.lock()
+                    val hasDevices = !devices.isEmpty()
                     devices.remove(device)
                     devicesLock.unlock()
 
-                    if (shouldStopService()) {
+                    if (hasDevices && shouldStopService()) {
                         gattWrapper.close()
                         stopService()
                     }
@@ -136,12 +147,13 @@ class BLEService : Service() {
                 COMMAND_UNREGISTER_CALLBACK -> {
                     val listenerTag = msg.obj as String
                     callbacksLock.lock()
+                    val hasDevices = !callbacks.isEmpty()
                     val listener = callbacks[listenerTag]!!
                     callbacks.remove(listenerTag)
                     callbacksLock.unlock()
                     audioProcessor.removeListener(listener)
 
-                    if (shouldStopService()) {
+                    if (hasDevices && shouldStopService()) {
                         gattWrapper.close()
                         stopService()
                     }
@@ -149,115 +161,145 @@ class BLEService : Service() {
             }
         }
 
-        var audioProcessor: AudioProcessor = object : AudioProcessor, Visualizer.OnDataCaptureListener {
+        var audioProcessor: AudioProcessor =
+            object : AudioProcessor, Visualizer.OnDataCaptureListener {
 
-            val FFT_FX_SIZE = 6
+                val FFT_FX_SIZE = 6
 
-            private var listeners = HashSet<AudioListener>()
+                private var listeners = HashSet<AudioListener>()
 
-            private var visualizer: Visualizer? = null
-            private var visualizerRange: Int = 1
-            private var fftFXBoundsLow = FloatArray(FFT_FX_SIZE, { i -> 0.0f })
-            private var fftFXBoundsHigh = FloatArray(FFT_FX_SIZE, { i -> 0.0f })
-            private var fftFXLightTimer = FloatArray(FFT_FX_SIZE, { i -> 0.0f })
-            private var fftFXLastTime: Long = 0
-            private var fftFXFrametime: Float = 0.0f
+                private var visualizer: Visualizer? = null
+                private var visualizerRange: Int = 1
+                private var fftFXBoundsLow = FloatArray(FFT_FX_SIZE) { 0.0f }
+                private var fftFXBoundsHigh = FloatArray(FFT_FX_SIZE) { 0.0f }
+                private var fftFXLightTimer = FloatArray(FFT_FX_SIZE) { 0.0f }
+                private var fftFXLastTime: Long = 0
+                private var fftFXFrametime: Float = 0.0f
 
-            override fun addListener(listener: AudioListener) {
-                if (visualizer == null) {
-                    visualizer = Visualizer(0)
+                override fun addListener(listener: AudioListener) {
+                    if (visualizer == null) {
+                        visualizer = Visualizer(0)
+                    }
+                    listeners.add(listener)
+                    if (listeners.size == 1) {
+                        beginCapture()
+                    }
                 }
-                listeners.add(listener)
-                if (listeners.size == 1) {
-                    beginCapture()
-                }
-            }
 
-            override fun removeListener(listener: AudioListener) {
-                listeners.remove(listener)
-                if (listeners.isEmpty()) {
+                override fun removeListener(listener: AudioListener) {
+                    listeners.remove(listener)
+                    if (listeners.isEmpty()) {
+                        endCapture()
+                    }
+                }
+
+                override fun removeAllListeners() {
+                    listeners.clear()
                     endCapture()
                 }
-            }
 
-            override fun removeAllListeners() {
-                listeners.clear()
-                endCapture()
-            }
-
-            override fun shutdown() {
-                removeAllListeners()
-                visualizer?.release()
-            }
-
-            fun beginCapture() {
-                if (visualizer != null && !visualizer!!.enabled) {
-                    val range = Visualizer.getCaptureSizeRange()
-                    visualizer!!.captureSize = Math.max(range[0], Math.min(range[1], 1024))
-                    visualizerRange = visualizer!!.captureSize
-                    visualizer!!.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
-                    visualizer!!.setDataCaptureListener(this, Visualizer.getMaxCaptureRate(), false, true)
-                    visualizer!!.enabled = true
-                    fftFXLastTime = System.currentTimeMillis()
-                }
-            }
-
-            fun endCapture() {
-                if (visualizer != null && visualizer!!.enabled) {
-                    visualizer!!.enabled = false
-                }
-            }
-
-            private fun sampleFFT(fft: FloatArray, boundsIndex: Int, start: Int, end: Int, threshold: Float): Float {
-                var sum = 0.0f
-                var vMin = 1.0f
-                var vMax = 0.0f
-
-                for (i in start until end) {
-                    sum += fft[i]
-                    vMin = Math.min(fft[i], vMin)
-                    vMax = Math.max(fft[i], vMax)
+                override fun shutdown() {
+                    removeAllListeners()
+                    visualizer?.release()
                 }
 
-                sum /= (end - start).toFloat()
-
-                if (vMin < fftFXBoundsLow[boundsIndex]) {
-                    //fftFXBoundsLow[boundsIndex] = min
-                    fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime)
-                } else {
-                    fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 0.1f)
+                fun beginCapture() {
+                    if (visualizer != null && !visualizer!!.enabled) {
+                        val range = Visualizer.getCaptureSizeRange()
+                        visualizer!!.captureSize = max(range[0], min(range[1], 1024))
+                        visualizerRange = visualizer!!.captureSize
+//                        visualizer!!.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
+                        visualizer!!.setDataCaptureListener(
+                            this,
+                            Visualizer.getMaxCaptureRate(),
+                            false,
+                            true
+                        )
+                        visualizer!!.enabled = true
+                        fftFXLastTime = System.currentTimeMillis()
+                    }
                 }
 
-                if (vMax > fftFXBoundsHigh[boundsIndex]) {
-                    //fftFXBoundsHigh[boundsIndex] = max
-                    fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * Math.min(1.0f, fftFXFrametime)
-                } else {
-                    fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * Math.min(1.0f, fftFXFrametime * 0.1f)
+                fun endCapture() {
+                    if (visualizer != null && visualizer!!.enabled) {
+                        visualizer!!.enabled = false
+                    }
                 }
 
-                // Map between 0 and 1
+                private fun sampleFFT(
+                    fft: FloatArray,
+                    boundsIndex: Int,
+                    start: Int,
+                    end: Int,
+                    threshold: Float
+                ): Float {
+//                    var sum = 0.0f
+                    var vMin = 255.0f
+                    var vMax = 0.0f
+
+                    for (i in start until end) {
+//                        sum += fft[i]
+                        vMin = min(fft[i], vMin)
+                        vMax = max(fft[i], vMax)
+                    }
+
+//                    sum /= (end - start).toFloat()
+
+                    if (vMin < fftFXBoundsLow[boundsIndex]) {
+                        //fftFXBoundsLow[boundsIndex] = min
+                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
+                            1.0f,
+                            fftFXFrametime * 10f
+                        )
+                    } else {
+                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
+                            1.0f,
+                            fftFXFrametime * 0.1f
+                        )
+                    }
+
+                    if (vMax > fftFXBoundsHigh[boundsIndex]) {
+                        //fftFXBoundsHigh[boundsIndex] = max
+                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
+                            1.0f,
+                            fftFXFrametime * 10f
+                        )
+                    } else {
+                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
+                            1.0f,
+                            fftFXFrametime * 0.1f
+                        )
+                    }
+
+                    // Map between 0 and 1
 //                val boundsHigh = (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold
 //                val boundsLow = fftFXBoundsLow[boundsIndex]
 //                val boundsDelta = (boundsHigh - boundsLow).toFloat()
 //                return Math.max(0.0f, Math.min((vMax - boundsLow) / boundsDelta, 1.0f))
 
-                fftFXLightTimer[boundsIndex] -= fftFXFrametime
+                    fftFXLightTimer[boundsIndex] -= fftFXFrametime
 
-                // Step between 0 and 1
-                if (vMax >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold + fftFXBoundsLow[boundsIndex]) {
-                    fftFXLightTimer[boundsIndex] = 0.1f
-                    return 1.0f
-                } else {
-                    if (fftFXLightTimer[boundsIndex] > 0.0f) {
+                    // Step between 0 and 1
+                    if (vMax >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold + fftFXBoundsLow[boundsIndex]) {
+                        fftFXLightTimer[boundsIndex] = 0.2f
                         return 1.0f
+                    } else {
+                        if (fftFXLightTimer[boundsIndex] > 0.0f) {
+                            return 1.0f
+                        }
+                        return 0.0f
                     }
-                    return 0.0f
                 }
-            }
 
-            var fft: FloatArray? = null
-            val peakRMS = Visualizer.MeasurementPeakRms()
-            override fun onFftDataCapture(visualizer: Visualizer?, bytes: ByteArray?, samplingRate: Int) {
+                var fft: FloatArray? = null
+                var fftLast: FloatArray? = null
+                var fftSmooth: FloatArray? = null
+                //                val peakRMS = Visualizer.MeasurementPeakRms()
+                override fun onFftDataCapture(
+                    visualizer: Visualizer?,
+                    bytes: ByteArray?,
+                    samplingRate: Int
+                ) {
 //                if (fft == null ||
 //                    fft?.size != bytes!!.size / 2) {
 //                    fft = FloatArray(bytes!!.size / 2)
@@ -269,41 +311,63 @@ class BLEService : Service() {
 //                    fft!![i] = (real * real + imag * imag)
 //                }
 
-                val n: Int = bytes!!.size
+                    val n: Int = bytes!!.size
 //                val magnitudes = FloatArray(n / 2 + 1)
 //                val phases = FloatArray(n / 2 + 1)
-                if (fft == null ||
-                    fft?.size != n / 2 + 1
-                ) {
-                    fft = FloatArray(n / 2 + 1)
-                }
+                    if (fft == null ||
+                        fft?.size != n / 2 + 1
+                    ) {
+                        fft = FloatArray(n / 2 + 1) { 0.0f }
+                        fftLast = FloatArray(n / 2 + 1) { 0.0f }
+                        fftSmooth = FloatArray(n / 2 + 1) { 0.0f }
+                    }
 
-                fft!![0] = Math.abs(bytes!![0].toFloat()) // DC
-                fft!![n / 2] = Math.abs(bytes!![1].toFloat()) // Nyquist
+                    fft!![0] = abs(bytes[0].toFloat()) // DC
+                    fft!![n / 2] = abs(bytes[1].toFloat()) // Nyquist
 //                phases[0] = 0.0f
 //                phases[n / 2] = 0.0f
-                for (k in 1 until n / 2) {
-                    val i = k * 2
-                    fft!![k] = Math.hypot(bytes[i].toDouble(), bytes[i + 1].toDouble()).toFloat()
+                    for (k in 1 until n / 2) {
+                        val i = k * 2
+                        fft!![k] =
+                            hypot(bytes[i].toDouble(), bytes[i + 1].toDouble()).toFloat()
 //                    phases[k] = Math.atan2(fft[i + 1].toDouble(), fft[i].toDouble()).toFloat()
-                }
+                    }
 
-                val currentMillis: Long = System.currentTimeMillis()
-                fftFXFrametime = (currentMillis - fftFXLastTime).toFloat() / 1000.0f
-                fftFXLastTime = currentMillis
+                    val currentMillis: Long = System.currentTimeMillis()
+                    fftFXFrametime = (currentMillis - fftFXLastTime).toFloat() / 1000.0f
+                    fftFXLastTime = currentMillis
 
-                //visualizer!!.getMeasurementPeakRms(peakRMS)
+                    //visualizer!!.getMeasurementPeakRms(peakRMS)
 //                Log.i("asdf", "peak ${peakRMS.mRms.toFloat()/peakRMS.mPeak.toFloat()}")
 
-                val processedData = byteArrayOf(
-                    //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
-                    (sampleFFT(fft!!, 0, 0, 2, 1.0f).toDouble() * 255).toByte(),
-                    (sampleFFT(fft!!, 1, 4, 12, 1f).toDouble() * 255).toByte(),
-                    (sampleFFT(fft!!, 2, 12, 32, 1f).toDouble() * 255).toByte(),
-                    (sampleFFT(fft!!, 3, 32, 64, 1f).toDouble() * 255).toByte(),
-                    (sampleFFT(fft!!, 4, 64, 256, 1f).toDouble() * 255).toByte(),
-                    (sampleFFT(fft!!, 5, 256, 512, 1f).toDouble() * 255).toByte()
-                )
+//                    for (i in fftSmooth!!.indices) {
+//                        fftSmooth!![i] += (fft!![i] - fftSmooth!![i]) * min(
+//                            1.0f, fftFXFrametime * 10f
+//                        )
+//                    }
+//
+
+                   for (i in fftSmooth!!.indices) {
+                       fftSmooth!![i] = (fft!![i] + fftLast!![i]) * 0.5f
+                   }
+                    fftLast = fft!!.clone()
+
+                    Log.i(
+                        "asdf",
+                        "bass: ${fftSmooth!![1]} (${fft!![1]}) --- ${fftFXBoundsLow[0]} --- ${fftFXBoundsHigh[0]}"
+                    )
+
+                    val processedData = byteArrayOf(
+                        //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
+                        (sampleFFT(fftSmooth!!, 0, 0, 2, 0.8f).toDouble() * 255).toByte(),
+                        (sampleFFT(fftSmooth!!, 1, 4, 12, 0.8f).toDouble() * 255).toByte(),
+                        (sampleFFT(fftSmooth!!, 2, 12, 32, 0.8f).toDouble() * 255).toByte(),
+                        (sampleFFT(fftSmooth!!, 3, 32, 64, 0.8f).toDouble() * 255).toByte(),
+                        (sampleFFT(fftSmooth!!, 4, 64, 256, 0.8f).toDouble() * 255).toByte(),
+                        (sampleFFT(fftSmooth!!, 5, 256, 512, 0.8f).toDouble() * 255).toByte()
+                    )
+
+//                    Log.i("asdf", "low: ${processedData[0]}")
 
 //                    var maxAmp = 0.0f
 //                    for (i in 0 until 5) {
@@ -313,32 +377,42 @@ class BLEService : Service() {
 //                        fftFXBoundsHigh[i] = Math.max(fftFXBoundsHigh[i], maxAmp * 0.1f)
 //                    }
 
-                listeners.forEach { listener ->
-                    listener.receiveProcessedAudio(processedData)
+                    listeners.forEach { listener ->
+                        listener.receiveProcessedAudio(processedData)
+                    }
+                }
+
+                override fun onWaveFormDataCapture(
+                    visualizer: Visualizer?,
+                    waveform: ByteArray?,
+                    samplingRate: Int
+                ) {
                 }
             }
 
-            override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-            }
-        }
-
-        var gattWrapper: BluetoothGattWrapper = object : BluetoothGattWrapper() {
+        var gattWrapper = object : BluetoothGattWrapper() {
 
             var ledService: BluetoothGattService? = null
             var audioDataCharacteristic: BluetoothGattCharacteristic? = null
             val deviceListeners = HashMap<BluetoothDevice, AudioListener>()
+            var audioFrame: Int = 0
 
             override fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 connectedGatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
                 ledService = gatt?.getService(BLEConstants.LEDService)
-                audioDataCharacteristic = ledService?.getCharacteristic(BLEConstants.AudioDataCharacteristic)
+                audioDataCharacteristic =
+                    ledService?.getCharacteristic(BLEConstants.AudioDataCharacteristic)
                 if (audioDataCharacteristic != null &&
                     gatt != null
                 ) {
                     val deviceListener = object : AudioListener {
                         override fun receiveProcessedAudio(data: ByteArray) {
                             audioDataCharacteristic?.value = data
-                            wrappedWriteCharacteristic(audioDataCharacteristic)
+                            if (audioDataCharacteristic != null) {
+                                wrappedWriteCharacteristic(audioDataCharacteristic)
+//                                Log.i("asdf", "Audio frame $audioFrame")
+                                ++audioFrame
+                            }
                         }
                     }
                     deviceListeners[gatt!!.device] = deviceListener;
@@ -410,19 +484,21 @@ class BLEService : Service() {
         var pendingIntent: PendingIntent? = null
         if (shouldRegister) {
             if (device != null) {
-                pendingIntent = Intent(this, CollarSettingsActivity::class.java).let { notificationIntent ->
-                    notificationIntent.putExtra("collarName", device?.name!!)
-                    notificationIntent.putExtra("collarDevice", device)
-                    TaskStackBuilder.create(this)
-                        .addNextIntentWithParentStack(notificationIntent)
-                        .getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
-                }
+                pendingIntent =
+                    Intent(this, CollarSettingsActivity::class.java).let { notificationIntent ->
+                        notificationIntent.putExtra("collarName", device?.name!!)
+                        notificationIntent.putExtra("collarDevice", device)
+                        TaskStackBuilder.create(this)
+                            .addNextIntentWithParentStack(notificationIntent)
+                            .getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
+                    }
             } else {
-                pendingIntent = Intent(this, DevVisualizerActivity::class.java).let { notificationIntent ->
-                    TaskStackBuilder.create(this)
-                        .addNextIntentWithParentStack(notificationIntent)
-                        .getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
-                }
+                pendingIntent =
+                    Intent(this, DevVisualizerActivity::class.java).let { notificationIntent ->
+                        TaskStackBuilder.create(this)
+                            .addNextIntentWithParentStack(notificationIntent)
+                            .getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
+                    }
             }
         }
 

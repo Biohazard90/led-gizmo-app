@@ -22,7 +22,7 @@ import kotlinx.android.synthetic.main.content_main.*
 
 class MainActivity : AppCompatActivity() {
 
-    private val SCAN_PERIOD: Long = 10000
+    private val SCAN_PERIOD: Long = 20000
     private val REQUEST_ENABLE_BLUETOOTH = 1337
     private val PERMISSION_REQUEST_ALL = 5001
     private val handler: Handler = Handler(Looper.getMainLooper())

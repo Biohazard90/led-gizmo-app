@@ -19,8 +19,6 @@
 
     <ListPreference
         app:defaultValue="blink"
-        app:entries="@array/led_type_entries"
-        app:entryValues="@array/led_type_values"
         app:iconSpaceReserved="false"
         app:key="led_type"
         app:title="@string/led_type_title"

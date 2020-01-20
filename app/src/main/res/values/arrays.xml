@@ -1,22 +1,16 @@
 <resources>
     <!-- Reply Preference -->
     <string-array name="led_type_entries">
-        <item>Blink</item>
-        <item>Wave</item>
-        <item>Color Wheel</item>
-        <item>Visor</item>
-        <item>Police</item>
-        <item>Christmas</item>
-        <item>Audio Visualizer</item>
+        <item>Empty</item>
+<!--        <item>Wave</item>-->
+<!--        <item>Color Wheel</item>-->
+<!--        <item>Visor</item>-->
+<!--        <item>Police</item>-->
+<!--        <item>Christmas</item>-->
+<!--        <item>Audio Visualizer</item>-->
     </string-array>
 
     <string-array name="led_type_values">
-        <item>blink</item>
-        <item>wave</item>
-        <item>wheel</item>
-        <item>visor</item>
-        <item>police</item>
-        <item>christmas</item>
-        <item>visualizer</item>
+        <item>0</item>
     </string-array>
 </resources>

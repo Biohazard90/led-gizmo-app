@@ -1,32 +1,54 @@
 package com.kristjanskutta.gizmoled
 
 import android.bluetooth.*
+import android.util.Log
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
+import kotlin.collections.HashSet
 
-abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
+interface BLEWrapperInterface {
+    fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {}
+    fun onWrappedCharacteristicRead(characteristic: BluetoothGattCharacteristic?, status: Int) {}
+    fun onWrappedDisconnected(gatt: BluetoothGatt?) {}
+}
 
-    @Volatile protected var connectedGatt: BluetoothGatt? = null
-
-    private class Command(val type: Int = 0, val characteristic: BluetoothGattCharacteristic) {
+class BluetoothGattWrapperInstance {
+    class Command(
+        val type: Int = 0,
+        val callback: BLEWrapperInterface,
+        val characteristic: BluetoothGattCharacteristic
+    ) {
         override fun equals(other: Any?): Boolean {
             return other is Command &&
                     type == other?.type && characteristic == other?.characteristic
         }
     }
 
-    private val queue: Queue<Command> = LinkedList<Command>()
-    private val lock: ReentrantLock = ReentrantLock()
-    private var isQueueBusy = false
+    val queue: Queue<Command> = LinkedList<Command>()
+    val lock: ReentrantLock = ReentrantLock()
+    var busyCommand: Command? = null
+//    var isQueueBusy = false
+//    var callbacks = HashSet<BLEWrapperInterface>()
+}
+
+abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterface {
+
+    companion object {
+        var deviceHelpers = HashMap<String, BluetoothGattWrapperInstance>()
+    }
+
+    @Volatile
+    protected var connectedGatt: BluetoothGatt? = null
+    var sharedInstance: BluetoothGattWrapperInstance? = null
 
     private fun processQueue() {
-        lock.lock()
-        if (!queue.isEmpty() &&
-            !isQueueBusy
+        sharedInstance!!.lock.lock()
+        if (!sharedInstance!!.queue.isEmpty() &&
+            sharedInstance!!.busyCommand == null
         ) {
-            isQueueBusy = true
-            val cmd = queue.remove()
-            lock.unlock()
+            val cmd = sharedInstance!!.queue.remove()
+            sharedInstance!!.busyCommand = cmd
+            sharedInstance!!.lock.unlock()
 
             when (cmd.type) {
                 0 -> {
@@ -34,18 +56,32 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
                 }
 
                 1 -> {
-                    connectedGatt?.writeCharacteristic(cmd.characteristic)
+                    val writeStatus = connectedGatt?.writeCharacteristic(cmd.characteristic) ?: false
+                    if (!writeStatus) {
+                        Log.i("asdf", "write failed")
+                    }
                 }
             }
         } else {
-            lock.unlock()
+            sharedInstance!!.lock.unlock()
         }
     }
 
     override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
         super.onConnectionStateChange(gatt, status, newState)
 
-        if (status == BluetoothGatt.GATT_SUCCESS) {
+        if (status == BluetoothGatt.GATT_SUCCESS &&
+            gatt != null
+        ) {
+            if (deviceHelpers.containsKey(gatt.device.address)) {
+                sharedInstance = deviceHelpers[gatt.device.address]
+            } else {
+                sharedInstance = BluetoothGattWrapperInstance()
+                deviceHelpers[gatt.device.address] = sharedInstance!!
+            }
+
+//            sharedInstance!!.callbacks.add(this)
+
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 // We successfully connected, proceed with service discovery
                 connectedGatt = gatt
@@ -72,53 +108,86 @@ abstract class BluetoothGattWrapper() : BluetoothGattCallback() {
         }
     }
 
-    override fun onCharacteristicRead(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
+    override fun onCharacteristicRead(
+        gatt: BluetoothGatt?,
+        characteristic: BluetoothGattCharacteristic?,
+        status: Int
+    ) {
         super.onCharacteristicRead(gatt, characteristic, status)
-        lock.lock()
-        isQueueBusy = false
-        lock.unlock()
+        sharedInstance!!.lock.lock()
+        val callback = sharedInstance!!.busyCommand?.callback
+        sharedInstance!!.busyCommand = null
+        sharedInstance!!.lock.unlock()
 
-        onWrappedCharacteristicRead(characteristic, status)
+        callback?.onWrappedCharacteristicRead(characteristic, status)
+//        sharedInstance!!.callbacks.forEach { c -> c.onWrappedCharacteristicRead(characteristic, status) }
+//        onWrappedCharacteristicRead(characteristic, status)
         processQueue()
     }
 
-    override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
+    override fun onCharacteristicWrite(
+        gatt: BluetoothGatt?,
+        characteristic: BluetoothGattCharacteristic?,
+        status: Int
+    ) {
         super.onCharacteristicWrite(gatt, characteristic, status)
-        lock.lock()
-        isQueueBusy = false
-        lock.unlock()
+        sharedInstance!!.lock.lock()
+//        sharedInstance!!.isQueueBusy = false
+        sharedInstance!!.busyCommand = null
+        sharedInstance!!.lock.unlock()
 
         processQueue()
     }
 
-    open fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {}
-    open fun onWrappedCharacteristicRead(characteristic: BluetoothGattCharacteristic?, status: Int) {}
-    open fun onWrappedDisconnected(gatt: BluetoothGatt?) {}
+    override fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {}
+    override fun onWrappedCharacteristicRead(
+        characteristic: BluetoothGattCharacteristic?,
+        status: Int
+    ) {
+    }
+
+    override fun onWrappedDisconnected(gatt: BluetoothGatt?) {}
 
     open fun close() {
         connectedGatt?.close()
+//        sharedInstance?.callbacks?.remove(this)
+        if (sharedInstance != null) {
+            sharedInstance!!.lock.lock()
+            if (sharedInstance!!.busyCommand?.callback == this) {
+                sharedInstance!!.busyCommand = null
+            }
+            sharedInstance!!.queue.removeIf { q -> q.callback == this }
+            sharedInstance!!.lock.unlock()
+        }
     }
 
-    fun wrappedGetService(id: UUID): BluetoothGattService? {
-        return connectedGatt?.getService(id)
-    }
+//    fun wrappedGetService(id: UUID): BluetoothGattService? {
+//        return connectedGatt?.getService(id)
+//    }
 
     fun wrappedReadCharacteristic(characteristic: BluetoothGattCharacteristic?) {
-        lock.lock()
-        queue.add(Command(0, characteristic!!))
-        lock.unlock()
+        if (sharedInstance == null) {
+            return
+        }
+        sharedInstance!!.lock.lock()
+        sharedInstance!!.queue.add(BluetoothGattWrapperInstance.Command(0, this, characteristic!!))
+        sharedInstance!!.lock.unlock()
         processQueue()
     }
 
     fun wrappedWriteCharacteristic(characteristic: BluetoothGattCharacteristic?) {
-        val newCommand = Command(1, characteristic!!)
-        lock.lock()
-        if (queue.contains(newCommand)) {
-            lock.unlock()
+        if (sharedInstance == null) {
             return
         }
-        queue.add(newCommand)
-        lock.unlock()
+        val newCommand = BluetoothGattWrapperInstance.Command(1, this, characteristic!!)
+        sharedInstance!!.lock.lock()
+        if (sharedInstance!!.queue.contains(newCommand)) {
+            sharedInstance!!.lock.unlock()
+            Log.i("asdf", "dropped write")
+            return
+        }
+        sharedInstance!!.queue.add(newCommand)
+        sharedInstance!!.lock.unlock()
         processQueue()
     }
 }
