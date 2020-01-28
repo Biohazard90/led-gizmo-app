@@ -183,7 +183,7 @@ abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterfa
         sharedInstance!!.lock.lock()
         if (sharedInstance!!.queue.contains(newCommand)) {
             sharedInstance!!.lock.unlock()
-            Log.i("asdf", "dropped write")
+//            Log.i("asdf", "dropped write")
             return
         }
         sharedInstance!!.queue.add(newCommand)

@@ -25,20 +25,23 @@
     <string name="preference_fade_out">Fade out</string>
     <string name="preference_brightness">Brightness</string>
     <string name="preference_decay">Decay</string>
+    <string name="preference_angle">Angle</string>
     <string name="preference_rainbow">Rainbow</string>
     <string name="preference_rainbow_cycle_speed">Rainbow cycle speed</string>
     <string name="preference_rainbow_cycle_length">Rainbow cycle length</string>
     <string name="preference_length">Length</string>
-    <string name="effect_type_settings_blink">Blink settings</string>
-    <string name="effect_type_settings_wave">Wave settings</string>
-    <string name="effect_type_settings_color_wheel">Color wheel settings</string>
-    <string name="effect_type_settings_visualizer">Visualizer settings</string>
 
     <!-- Effect names-->
     <string name="effect_blink">Blink</string>
     <string name="category_blink_settings">Blink settings</string>
     <string name="effect_wheel">Color wheel</string>
     <string name="category_wheel_settings">Color wheel settings</string>
+    <string name="effect_opaque">Opaque</string>
+    <string name="category_opaque_settings">Opaque settings</string>
+    <string name="effect_gradient">Gradient</string>
+    <string name="category_gradient_settings">Gradient settings</string>
+    <string name="effect_test">Test</string>
+    <string name="category_test_settings">Test settings</string>
     <string name="effect_visualizer">Visualizer</string>
     <string name="category_visualizer_settings">Visualizer settings</string>
 

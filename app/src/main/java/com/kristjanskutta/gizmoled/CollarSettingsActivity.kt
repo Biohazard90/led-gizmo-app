@@ -94,7 +94,7 @@ class CollarSettingsActivity : AppCompatActivity(),
                 val fnResetCharacteristic =
                     ledService?.getCharacteristic(BLEConstants.FnResetCharacteristic)
                 val newValue = byteArrayOf((++lastResetCall).toByte(), currentEffectIndex.toByte())
-                fnResetCharacteristic?.setValue(newValue)
+                fnResetCharacteristic?.value = newValue
                 gattWrapper.wrappedWriteCharacteristic(fnResetCharacteristic)
 
                 if (lastResetCall > 255) {
@@ -158,7 +158,13 @@ class CollarSettingsActivity : AppCompatActivity(),
     }
 
     private fun updateVisualizerStreamEnabled() {
-        val shouldEnableStream = Effects.visualizerEffectNames.contains(currentEffectIndex)
+        val shouldEnableStream = currentEffectList != null &&
+                Effects.visualizerEffectNames.contains(
+                    currentEffectList?.elementAt(
+                        currentEffectIndex
+                    ) ?: -1
+                )
+
         if (shouldEnableStream) {
             if (BLEService.needsPermissions(this)) {
                 ActivityCompat.requestPermissions(
@@ -245,7 +251,7 @@ class CollarSettingsActivity : AppCompatActivity(),
                     // Set currently selected effect
                     // Reload menu with selected effect properties
                     val typeInfo = characteristic?.value!!
-                    var selectedEffect = -1
+                    var selectedEffect = 0
                     //val effectVisualizerFlags = typeInfo[2].toInt()
                     val numEffects = typeInfo[2].toInt()
                     var effectList = IntArray(numEffects)
@@ -254,8 +260,8 @@ class CollarSettingsActivity : AppCompatActivity(),
                     for (i in 0 until numEffects) {
                         effectList[i] = typeInfo[3 + i].toInt()
 
-                        if (selectedEffect == -1 || i == typeInfo[0].toInt()) {
-                            selectedEffect = effectList[i].toInt()
+                        if (i == typeInfo[0].toInt()) {
+                            selectedEffect = i //effectList[i].toInt()
                         }
 //                        if (Effects.visualizerEffectNames.contains(effectList[i])) {
 //                            visualizerIndices.add(i)
@@ -270,7 +276,7 @@ class CollarSettingsActivity : AppCompatActivity(),
                     runOnUiThread {
                         wrappedReadCharacteristic(
                             ledService?.getCharacteristic(
-                                Effects.getEffectCharacterisUUID(
+                                Effects.getEffectIndexCharacteristicUUID(
                                     selectedEffect
                                 )
                             )
@@ -343,9 +349,9 @@ class CollarSettingsActivity : AppCompatActivity(),
     override fun onFragmentPreferenceChanged(key: String, value: Int) {
         if (currentEffectSettings != null
         ) {
-            val offsetRegex = "prefSetting(\\d)".toRegex()
+            val offsetRegex = "prefSetting(\\d+)".toRegex()
             val offset = offsetRegex.find(key)!!.groupValues[1].toInt()
-            val typeRegex = "prefType(\\d)".toRegex()
+            val typeRegex = "prefType(\\d+)".toRegex()
             val type = typeRegex.find(key)!!.groupValues[1].toInt()
             val isColor = type == 1
             if (isColor) {
@@ -371,6 +377,12 @@ class CollarSettingsActivity : AppCompatActivity(),
     override fun onFragmentPreferenceChanged(key: String, value: String) {
         if (key == "led_type") {
             val effectIndex = value.toInt()
+            if (currentEffectList == null ||
+                effectIndex < 0 ||
+                effectIndex >= currentEffectList!!.size ||
+                effectIndex == currentEffectIndex) {
+                return
+            }
             // Update LED type on device
             val ledTypeCharacteristic =
                 ledService?.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
@@ -382,7 +394,7 @@ class CollarSettingsActivity : AppCompatActivity(),
 
             // Load new effect data
             val newEffectCharacteristic =
-                ledService?.getCharacteristic(Effects.getEffectCharacterisUUID(effectIndex))
+                ledService?.getCharacteristic(Effects.getEffectIndexCharacteristicUUID(effectIndex))
             gattWrapper?.wrappedReadCharacteristic(newEffectCharacteristic)
             return
         }
@@ -469,7 +481,8 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
         val effectList = arguments?.getIntArray("effectList")
         if (effectList != null && currentEffect != -1) {
             val effectListPreference = preferenceScreen.getPreference(0) as ListPreference
-            val strList = effectList.map { e -> e.toString() }.toTypedArray()
+            val strList = IntArray(effectList.size) { i -> i }.map { e -> e.toString() }
+                .toTypedArray()//effectList.map { e -> e.toString() }.toTypedArray()
             effectListPreference.entryValues = strList
 
             val labels = effectList.map { e ->
@@ -531,9 +544,9 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                     }
                     2 -> { // Slider
                         val name = itr.next().toUByte()
-                        val value = itr.next().toInt()
-                        val min = itr.next().toInt()
-                        val max = itr.next().toInt()
+                        val value = itr.next().toUByte().toInt()
+                        val vMin = itr.next().toUByte().toInt()
+                        val vMax = itr.next().toUByte().toInt()
 //                        keyValueOffsets[key] = valueOffset + 2
                         valueOffset += 5
 
@@ -543,8 +556,8 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                         preference.title = Effects.getEffectSettingName(name, context)
                         preference.key = key
                         preference.setDefaultValue("1")
-                        preference.min = min
-                        preference.max = max
+                        preference.min = vMin
+                        preference.max = vMax
                         preference.showSeekBarValue = true
                         preferences.putInt(key, value)
                         preferences.apply()
