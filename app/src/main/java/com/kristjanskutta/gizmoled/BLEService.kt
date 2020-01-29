@@ -176,7 +176,7 @@ class BLEService : Service() {
                 private var fftHistoryPeak: ArrayList<FloatArray> = ArrayList()
                 private var fftHistoryWriter = -1
 
-                private var fftFXLightTimer = FloatArray(FFT_FX_SIZE) { 0.0f }
+                //                private var fftFXLightTimer = FloatArray(FFT_FX_SIZE) { 0.0f }
                 private var fftFXLastTime: Long = 0
                 private var fftFXFrametime: Float = 0.0f
 
@@ -280,16 +280,16 @@ class BLEService : Service() {
 
                     //fftFXLightTimer[boundsIndex] -= fftFXFrametime
 
-                    if (cPeak > cAvg * 1.1 &&
+                    return if (cPeak > cAvg * 1.25 &&
                         vMax >= (cPeak - cAvg) * threshold + cAvg
                     ) {
                         //fftFXLightTimer[boundsIndex] = 0.1f
-                        return 1.0f
+                        1.0f
                     } else {
                         // if (fftFXLightTimer[boundsIndex] > 0.0f) {
                         //    return 1.0f
                         //  }
-                        return 0.0f
+                        0.0f
                     }
                 }
 
@@ -343,19 +343,23 @@ class BLEService : Service() {
 
                     val processedData = floatArrayOf(
                         //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
-                        sampleFFT(fft!!, 0, 1, 3, 0.3f),
-                        sampleFFT(fft!!, 1, 3, 6, 0.4f),
-                        sampleFFT(fft!!, 2, 6, 24, 0.5f),
-                        sampleFFT(fft!!, 3, 24, 64, 0.5f),
-                        sampleFFT(fft!!, 4, 64, 256, 0.5f),
-                        sampleFFT(fft!!, 5, 256, 512, 0.5f)
+                        sampleFFT(fft!!, 0, 0, 2, 0.6f),
+                        sampleFFT(fft!!, 1, 4, 8, 0.7f),
+                        sampleFFT(fft!!, 2, 8, 16, 0.75f),
+                        sampleFFT(fft!!, 3, 16, 32, 0.75f),
+                        sampleFFT(fft!!, 4, 32, 224, 0.75f),
+                        sampleFFT(fft!!, 5, 224, 512, 0.75f)
                     )
 
                     for (i in 0 until FFT_FX_SIZE) {
-                        fftSmooth[i] += (processedData[i] - fftSmooth[i]) * min(
-                            1.0f,
-                            fftFXFrametime * 7.0f
-                        )
+                        if (processedData[i] > 0.5f) {
+                            fftSmooth[i] = processedData[i]
+                        } else {
+                            fftSmooth[i] += (processedData[i] - fftSmooth[i]) * min(
+                                1.0f,
+                                fftFXFrametime * (if (i == 0) 4.0f else 8.0f)
+                            )
+                        }
                         val hasBeat = fftSmooth[i] >= 0.5f
 //                        fftBeat[i] = (fftSmooth[i] * 255).toByte()
                         fftBeat[i] = if (hasBeat) 255.toByte() else 0
