@@ -175,8 +175,6 @@ class BLEService : Service() {
                 private var fftHistoryAvg: ArrayList<FloatArray> = ArrayList()
                 private var fftHistoryPeak: ArrayList<FloatArray> = ArrayList()
                 private var fftHistoryWriter = -1
-                //private var fftFXAverage = FloatArray(FFT_FX_SIZE) { 0.0f }
-                //private var fftFXPeak = FloatArray(FFT_FX_SIZE) { 0.0f }
 
                 private var fftFXLightTimer = FloatArray(FFT_FX_SIZE) { 0.0f }
                 private var fftFXLastTime: Long = 0
@@ -212,7 +210,7 @@ class BLEService : Service() {
                 fun beginCapture() {
                     if (visualizer != null && !visualizer!!.enabled) {
 
-                        while (fftHistoryAvg.size < 30) {
+                        while (fftHistoryAvg.size < 40) {
                             fftHistoryAvg.add(FloatArray(FFT_FX_SIZE))
                             fftHistoryPeak.add(FloatArray(FFT_FX_SIZE))
                         }
@@ -272,17 +270,17 @@ class BLEService : Service() {
                     var cAvg = 0.0f
                     var cPeak = 0.0f
                     fftHistoryAvg.forEach { f -> cAvg += f[boundsIndex] }
-                    fftHistoryPeak.forEach { f -> cPeak += f[boundsIndex] }
+                    fftHistoryPeak.forEach { f -> cPeak = max(cPeak, f[boundsIndex]) }
                     cAvg /= fftHistoryAvg.size.toFloat()
-                    cPeak /= fftHistoryPeak.size.toFloat()
+                    //cPeak /= fftHistoryPeak.size.toFloat()
 
-                    if (boundsIndex == 0) {
-                        Log.i("asdf", "cAvg: $cAvg, cPeak $cPeak")
-                    }
+//                    if (boundsIndex == 0) {
+//                        Log.i("asdf", "cAvg: $cAvg, cPeak $cPeak")
+//                    }
 
                     //fftFXLightTimer[boundsIndex] -= fftFXFrametime
 
-                    if (cPeak > cAvg * 1.05 &&
+                    if (cPeak > cAvg * 1.1 &&
                         vMax >= (cPeak - cAvg) * threshold + cAvg
                     ) {
                         //fftFXLightTimer[boundsIndex] = 0.1f
@@ -293,80 +291,6 @@ class BLEService : Service() {
                         //  }
                         return 0.0f
                     }
-
-//                    fftFXAverage[boundsIndex] += (sum - fftFXAverage[boundsIndex]) * min(
-//                            1.0f,
-//                    fftFXFrametime * 0.1f
-//                    )
-//
-//                    fftFXPeak[boundsIndex] += (vMax - fftFXPeak[boundsIndex]) * min(
-//                        1.0f,
-//                        fftFXFrametime * 0.8f
-//                    )
-
-//                    if (boundsIndex == 0) {
-//                        Log.i(
-//                            "asdf",
-//                            "avg: ${fftFXAverage[boundsIndex]}, peak: ${fftFXPeak[boundsIndex]}"
-//                        )
-//                    }
-
-//                    fftFXLightTimer[boundsIndex] -= fftFXFrametime
-//
-//                    if (fftFXPeak[boundsIndex] > fftFXAverage[boundsIndex] * 1.05 &&
-//                        vMax >= (fftFXPeak[boundsIndex] - fftFXAverage[boundsIndex]) * threshold + fftFXAverage[boundsIndex]) {
-//                        fftFXLightTimer[boundsIndex] = 0.1f
-//                        return 1.0f
-//                    } else {
-//                        if (fftFXLightTimer[boundsIndex] > 0.0f) {
-//                            return 1.0f
-//                        }
-//                        return 0.0f
-//                    }
-
-
-//                    if (vMin < fftFXBoundsLow[boundsIndex]) {
-//                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
-//                            1.0f,
-//                            fftFXFrametime * 5f
-//                        )
-//                    } else {
-//                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
-//                            1.0f,
-//                            fftFXFrametime * 0.3f
-//                        )
-//                    }
-//
-//                    if (vMax > fftFXBoundsHigh[boundsIndex]) {
-//                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
-//                            1.0f,
-//                            fftFXFrametime * 10f
-//                        )
-//                    } else {
-//                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
-//                            1.0f,
-//                            fftFXFrametime * 0.3f
-//                        )
-//                    }
-
-                    // Map between 0 and 1
-//                val boundsHigh = (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold
-//                val boundsLow = fftFXBoundsLow[boundsIndex]
-//                val boundsDelta = (boundsHigh - boundsLow).toFloat()
-//                return Math.max(0.0f, Math.min((vMax - boundsLow) / boundsDelta, 1.0f))
-
-//                    fftFXLightTimer[boundsIndex] -= fftFXFrametime
-
-                    // Step between 0 and 1
-//                    if (vMax >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold + fftFXBoundsLow[boundsIndex]) {
-//                        fftFXLightTimer[boundsIndex] = 0.1f
-//                        return 1.0f
-//                    } else {
-//                        if (fftFXLightTimer[boundsIndex] > 0.0f) {
-//                            return 1.0f
-//                        }
-//                        return 0.0f
-//                    }
                 }
 
                 var fft: FloatArray? = null
@@ -379,16 +303,6 @@ class BLEService : Service() {
                     bytes: ByteArray?,
                     samplingRate: Int
                 ) {
-//                if (fft == null ||
-//                    fft?.size != bytes!!.size / 2) {
-//                    fft = FloatArray(bytes!!.size / 2)
-//                }
-
-//                for (i in fft!!.indices) {
-//                    val real = bytes[i * 2 + 0].toFloat() / 128.0f
-//                    val imag = bytes[i * 2 + 1].toFloat() / 128.0f
-//                    fft!![i] = (real * real + imag * imag)
-//                }
 
                     val n: Int = bytes!!.size
 //                val magnitudes = FloatArray(n / 2 + 1)
@@ -426,41 +340,15 @@ class BLEService : Service() {
 //                    visualizer!!.getMeasurementPeakRms(peakRMS)
 //                Log.i("asdf", "peak ${peakRMS.mPeak.toFloat()}, rms ${peakRMS.mRms.toFloat()}")
 
-//                    for (i in fftSmooth!!.indices) {
-//                        fftSmooth!![i] += (fft!![i] - fftSmooth!![i]) * min(
-//                            1.0f, fftFXFrametime * 10f
-//                        )
-//                    }
-//
-
-//                   for (i in fftSmooth!!.indices) {
-//                       fftSmooth!![i] = fft!![i] //(fft!![i] + fftLast!![i]) * 0.5f
-//                   }
-//                    fftLast = fft!!.clone()
-
-//                    Log.i(
-//                        "asdf",
-//                        "bass: ${fftSmooth!![1]} (${fft!![1]}) --- ${fftFXBoundsLow[0]} --- ${fftFXBoundsHigh[0]}"
-//                    )
-
-//                    val processedData = byteArrayOf(
-//                        //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
-//                        (sampleFFT(fft!!, 0, 0, 2, 1.5f).toDouble() * 255).toByte(),
-//                        (sampleFFT(fft!!, 1, 2, 6, 1.5f).toDouble() * 255).toByte(),
-//                        (sampleFFT(fft!!, 2, 6, 24, 1.5f).toDouble() * 255).toByte(),
-//                        (sampleFFT(fft!!, 3, 24, 64, 1.5f).toDouble() * 255).toByte(),
-//                        (sampleFFT(fft!!, 4, 64, 256, 1.5f).toDouble() * 255).toByte(),
-//                        (sampleFFT(fft!!, 5, 256, 512, 1.5f).toDouble() * 255).toByte()
-//                    )
 
                     val processedData = floatArrayOf(
                         //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
-                        sampleFFT(fft!!, 0, 0, 2, 1.4f),
-                        sampleFFT(fft!!, 1, 2, 6, 1.4f),
-                        sampleFFT(fft!!, 2, 6, 24, 1.4f),
-                        sampleFFT(fft!!, 3, 24, 64, 1.3f),
-                        sampleFFT(fft!!, 4, 64, 256, 1.3f),
-                        sampleFFT(fft!!, 5, 256, 512, 1.3f)
+                        sampleFFT(fft!!, 0, 1, 3, 0.3f),
+                        sampleFFT(fft!!, 1, 3, 6, 0.4f),
+                        sampleFFT(fft!!, 2, 6, 24, 0.5f),
+                        sampleFFT(fft!!, 3, 24, 64, 0.5f),
+                        sampleFFT(fft!!, 4, 64, 256, 0.5f),
+                        sampleFFT(fft!!, 5, 256, 512, 0.5f)
                     )
 
                     for (i in 0 until FFT_FX_SIZE) {
@@ -472,14 +360,14 @@ class BLEService : Service() {
 //                        fftBeat[i] = (fftSmooth[i] * 255).toByte()
                         fftBeat[i] = if (hasBeat) 255.toByte() else 0
 
-                        if (hasBeat) {
-                            fftFXLightTimer[i] = 0.05f
-                        } else {
-                            if (fftFXLightTimer[i] > 0.0f) {
-                                fftBeat[i] = 255.toByte()
-                                fftFXLightTimer[i] -= fftFXFrametime
-                            }
-                        }
+//                        if (hasBeat) {
+//                            fftFXLightTimer[i] = 0.05f
+//                        } else {
+//                            if (fftFXLightTimer[i] > 0.0f) {
+//                                fftBeat[i] = 255.toByte()
+//                                fftFXLightTimer[i] -= fftFXFrametime
+//                            }
+//                        }
                     }
 
 //                    Log.i("asdf", "low: ${processedData[0]}")

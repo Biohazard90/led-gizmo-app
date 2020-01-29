@@ -401,7 +401,7 @@ class CollarSettingsActivity : AppCompatActivity(),
     }
 
     override fun onFragmentPreferenceChanged(key: String, value: Boolean) {
-        val offsetRegex = "prefSetting(\\d)".toRegex()
+        val offsetRegex = "prefSetting(\\d+)".toRegex()
         val offset = offsetRegex.find(key)!!.groupValues[1].toInt()
         if (offset >= currentEffectSettings!!.size) {
             throw ArrayIndexOutOfBoundsException()
