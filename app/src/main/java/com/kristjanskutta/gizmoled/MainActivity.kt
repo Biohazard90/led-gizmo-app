@@ -250,23 +250,25 @@ class MainActivity : AppCompatActivity() {
         }
 
         val bluetoothLeScanner = bluetoothAdapter!!.bluetoothLeScanner
-        if (enable) { // Stops scanning after a pre-defined scan period.
-            val currentScanIndex = ++lastScanIndex
-            handler.postDelayed({
-                if (currentScanIndex == lastScanIndex) {
-                    mScanning = false
-                    bluetoothLeScanner.stopScan(mLeScanCallback)
-                }
-            }, SCAN_PERIOD)
-            mScanning = true
-            bluetoothLeScanner.startScan(mLeScanCallback)
+        if (bluetoothLeScanner != null) {
+            if (enable) { // Stops scanning after a pre-defined scan period.
+                val currentScanIndex = ++lastScanIndex
+                handler.postDelayed({
+                    if (currentScanIndex == lastScanIndex) {
+                        mScanning = false
+                        bluetoothLeScanner.stopScan(mLeScanCallback)
+                    }
+                }, SCAN_PERIOD)
+                mScanning = true
+                bluetoothLeScanner.startScan(mLeScanCallback)
 
 //            val connectedDevices = .devices()
-            setListSearching()
-            addConnectedCollars()
-        } else {
-            mScanning = false
-            bluetoothLeScanner.stopScan(mLeScanCallback)
+                setListSearching()
+                addConnectedCollars()
+            } else {
+                mScanning = false
+                bluetoothLeScanner.stopScan(mLeScanCallback)
+            }
         }
     }
 

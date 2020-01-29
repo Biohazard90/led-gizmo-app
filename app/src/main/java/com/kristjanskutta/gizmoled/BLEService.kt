@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
+import android.media.audiofx.Visualizer.MEASUREMENT_MODE_PEAK_RMS
 import android.os.*
 import android.os.Process.THREAD_PRIORITY_BACKGROUND
 import android.util.Log
@@ -170,8 +171,13 @@ class BLEService : Service() {
 
                 private var visualizer: Visualizer? = null
                 private var visualizerRange: Int = 1
-                private var fftFXBoundsLow = FloatArray(FFT_FX_SIZE) { 0.0f }
-                private var fftFXBoundsHigh = FloatArray(FFT_FX_SIZE) { 0.0f }
+
+                private var fftHistoryAvg: ArrayList<FloatArray> = ArrayList()
+                private var fftHistoryPeak: ArrayList<FloatArray> = ArrayList()
+                private var fftHistoryWriter = -1
+                //private var fftFXAverage = FloatArray(FFT_FX_SIZE) { 0.0f }
+                //private var fftFXPeak = FloatArray(FFT_FX_SIZE) { 0.0f }
+
                 private var fftFXLightTimer = FloatArray(FFT_FX_SIZE) { 0.0f }
                 private var fftFXLastTime: Long = 0
                 private var fftFXFrametime: Float = 0.0f
@@ -205,10 +211,16 @@ class BLEService : Service() {
 
                 fun beginCapture() {
                     if (visualizer != null && !visualizer!!.enabled) {
+
+                        while (fftHistoryAvg.size < 30) {
+                            fftHistoryAvg.add(FloatArray(FFT_FX_SIZE))
+                            fftHistoryPeak.add(FloatArray(FFT_FX_SIZE))
+                        }
+
                         val range = Visualizer.getCaptureSizeRange()
                         visualizer!!.captureSize = max(range[0], min(range[1], 1024))
                         visualizerRange = visualizer!!.captureSize
-//                        visualizer!!.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
+                        visualizer!!.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
                         visualizer!!.setDataCaptureListener(
                             this,
                             Visualizer.getMaxCaptureRate(),
@@ -233,43 +245,109 @@ class BLEService : Service() {
                     end: Int,
                     threshold: Float
                 ): Float {
-//                    var sum = 0.0f
-                    var vMin = 255.0f
+                    var sum = 0.0f
+//                    var vMin = 255.0f
                     var vMax = 0.0f
 
                     for (i in start until end) {
-//                        sum += fft[i]
-                        vMin = min(fft[i], vMin)
+                        sum += fft[i]
+//                        vMin = min(fft[i], vMin)
                         vMax = max(fft[i], vMax)
                     }
 
-//                    sum /= (end - start).toFloat()
+                    sum /= (end - start).toFloat()
 
-                    if (vMin < fftFXBoundsLow[boundsIndex]) {
-                        //fftFXBoundsLow[boundsIndex] = min
-                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
-                            1.0f,
-                            fftFXFrametime * 10f
-                        )
-                    } else {
-                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
-                            1.0f,
-                            fftFXFrametime * 0.1f
-                        )
+                    if (boundsIndex == 0) {
+                        ++fftHistoryWriter
+                        if (fftHistoryWriter >= fftHistoryAvg.size) {
+                            fftHistoryWriter = 0
+                        }
                     }
 
-                    if (vMax > fftFXBoundsHigh[boundsIndex]) {
-                        //fftFXBoundsHigh[boundsIndex] = max
-                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
-                            1.0f,
-                            fftFXFrametime * 10f
-                        )
-                    } else {
-                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
-                            1.0f,
-                            fftFXFrametime * 0.1f
-                        )
+                    var aAvg = fftHistoryAvg[fftHistoryWriter]
+                    var aPeak = fftHistoryPeak[fftHistoryWriter]
+                    aAvg[boundsIndex] = sum
+                    aPeak[boundsIndex] = vMax
+
+                    var cAvg = 0.0f
+                    var cPeak = 0.0f
+                    fftHistoryAvg.forEach { f -> cAvg += f[boundsIndex] }
+                    fftHistoryPeak.forEach { f -> cPeak += f[boundsIndex] }
+                    cAvg /= fftHistoryAvg.size.toFloat()
+                    cPeak /= fftHistoryPeak.size.toFloat()
+
+                    if (boundsIndex == 0) {
+                        Log.i("asdf", "cAvg: $cAvg, cPeak $cPeak")
                     }
+
+                    //fftFXLightTimer[boundsIndex] -= fftFXFrametime
+
+                    if (cPeak > cAvg * 1.05 &&
+                        vMax >= (cPeak - cAvg) * threshold + cAvg
+                    ) {
+                        //fftFXLightTimer[boundsIndex] = 0.1f
+                        return 1.0f
+                    } else {
+                        // if (fftFXLightTimer[boundsIndex] > 0.0f) {
+                        //    return 1.0f
+                        //  }
+                        return 0.0f
+                    }
+
+//                    fftFXAverage[boundsIndex] += (sum - fftFXAverage[boundsIndex]) * min(
+//                            1.0f,
+//                    fftFXFrametime * 0.1f
+//                    )
+//
+//                    fftFXPeak[boundsIndex] += (vMax - fftFXPeak[boundsIndex]) * min(
+//                        1.0f,
+//                        fftFXFrametime * 0.8f
+//                    )
+
+//                    if (boundsIndex == 0) {
+//                        Log.i(
+//                            "asdf",
+//                            "avg: ${fftFXAverage[boundsIndex]}, peak: ${fftFXPeak[boundsIndex]}"
+//                        )
+//                    }
+
+//                    fftFXLightTimer[boundsIndex] -= fftFXFrametime
+//
+//                    if (fftFXPeak[boundsIndex] > fftFXAverage[boundsIndex] * 1.05 &&
+//                        vMax >= (fftFXPeak[boundsIndex] - fftFXAverage[boundsIndex]) * threshold + fftFXAverage[boundsIndex]) {
+//                        fftFXLightTimer[boundsIndex] = 0.1f
+//                        return 1.0f
+//                    } else {
+//                        if (fftFXLightTimer[boundsIndex] > 0.0f) {
+//                            return 1.0f
+//                        }
+//                        return 0.0f
+//                    }
+
+
+//                    if (vMin < fftFXBoundsLow[boundsIndex]) {
+//                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
+//                            1.0f,
+//                            fftFXFrametime * 5f
+//                        )
+//                    } else {
+//                        fftFXBoundsLow[boundsIndex] += (vMin - fftFXBoundsLow[boundsIndex]) * min(
+//                            1.0f,
+//                            fftFXFrametime * 0.3f
+//                        )
+//                    }
+//
+//                    if (vMax > fftFXBoundsHigh[boundsIndex]) {
+//                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
+//                            1.0f,
+//                            fftFXFrametime * 10f
+//                        )
+//                    } else {
+//                        fftFXBoundsHigh[boundsIndex] += (vMax - fftFXBoundsHigh[boundsIndex]) * min(
+//                            1.0f,
+//                            fftFXFrametime * 0.3f
+//                        )
+//                    }
 
                     // Map between 0 and 1
 //                val boundsHigh = (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold
@@ -277,24 +355,25 @@ class BLEService : Service() {
 //                val boundsDelta = (boundsHigh - boundsLow).toFloat()
 //                return Math.max(0.0f, Math.min((vMax - boundsLow) / boundsDelta, 1.0f))
 
-                    fftFXLightTimer[boundsIndex] -= fftFXFrametime
+//                    fftFXLightTimer[boundsIndex] -= fftFXFrametime
 
                     // Step between 0 and 1
-                    if (vMax >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold + fftFXBoundsLow[boundsIndex]) {
-                        fftFXLightTimer[boundsIndex] = 0.2f
-                        return 1.0f
-                    } else {
-                        if (fftFXLightTimer[boundsIndex] > 0.0f) {
-                            return 1.0f
-                        }
-                        return 0.0f
-                    }
+//                    if (vMax >= (fftFXBoundsHigh[boundsIndex] - fftFXBoundsLow[boundsIndex]) * threshold + fftFXBoundsLow[boundsIndex]) {
+//                        fftFXLightTimer[boundsIndex] = 0.1f
+//                        return 1.0f
+//                    } else {
+//                        if (fftFXLightTimer[boundsIndex] > 0.0f) {
+//                            return 1.0f
+//                        }
+//                        return 0.0f
+//                    }
                 }
 
                 var fft: FloatArray? = null
-                var fftLast: FloatArray? = null
-                var fftSmooth: FloatArray? = null
-                //                val peakRMS = Visualizer.MeasurementPeakRms()
+                //                var fftLast: FloatArray? = null
+                var fftSmooth: FloatArray = FloatArray(FFT_FX_SIZE) { 0.0f }
+                var fftBeat: ByteArray = ByteArray(FFT_FX_SIZE) { 0 }
+                //                                val peakRMS = Visualizer.MeasurementPeakRms()
                 override fun onFftDataCapture(
                     visualizer: Visualizer?,
                     bytes: ByteArray?,
@@ -318,8 +397,8 @@ class BLEService : Service() {
                         fft?.size != n / 2 + 1
                     ) {
                         fft = FloatArray(n / 2 + 1) { 0.0f }
-                        fftLast = FloatArray(n / 2 + 1) { 0.0f }
-                        fftSmooth = FloatArray(n / 2 + 1) { 0.0f }
+//                        fftLast = FloatArray(n / 2 + 1) { 0.0f }
+//                        fftSmooth = FloatArray(n / 2 + 1) { 0.0f }
                     }
 
                     fft!![0] = abs(bytes[0].toFloat()) // DC
@@ -328,8 +407,15 @@ class BLEService : Service() {
 //                phases[n / 2] = 0.0f
                     for (k in 1 until n / 2) {
                         val i = k * 2
-                        fft!![k] =
-                            hypot(bytes[i].toDouble(), bytes[i + 1].toDouble()).toFloat()
+
+//                        val rfk =  bytes.get(i).toDouble()
+//                        val ifk =  bytes.get(i + 1).toDouble()
+//
+//                        var magnitude = rfk * rfk + ifk * ifk
+//                        val dbValue = if (magnitude > 0.0) (10 * Math.log10(magnitude)) else 0.0
+//                        fft!![k] = dbValue.toFloat()
+
+                        fft!![k] = hypot(bytes[i].toDouble(), bytes[i + 1].toDouble()).toFloat()
 //                    phases[k] = Math.atan2(fft[i + 1].toDouble(), fft[i].toDouble()).toFloat()
                     }
 
@@ -337,8 +423,8 @@ class BLEService : Service() {
                     fftFXFrametime = (currentMillis - fftFXLastTime).toFloat() / 1000.0f
                     fftFXLastTime = currentMillis
 
-                    //visualizer!!.getMeasurementPeakRms(peakRMS)
-//                Log.i("asdf", "peak ${peakRMS.mRms.toFloat()/peakRMS.mPeak.toFloat()}")
+//                    visualizer!!.getMeasurementPeakRms(peakRMS)
+//                Log.i("asdf", "peak ${peakRMS.mPeak.toFloat()}, rms ${peakRMS.mRms.toFloat()}")
 
 //                    for (i in fftSmooth!!.indices) {
 //                        fftSmooth!![i] += (fft!![i] - fftSmooth!![i]) * min(
@@ -347,25 +433,54 @@ class BLEService : Service() {
 //                    }
 //
 
-                   for (i in fftSmooth!!.indices) {
-                       fftSmooth!![i] = (fft!![i] + fftLast!![i]) * 0.5f
-                   }
-                    fftLast = fft!!.clone()
+//                   for (i in fftSmooth!!.indices) {
+//                       fftSmooth!![i] = fft!![i] //(fft!![i] + fftLast!![i]) * 0.5f
+//                   }
+//                    fftLast = fft!!.clone()
 
-                    Log.i(
-                        "asdf",
-                        "bass: ${fftSmooth!![1]} (${fft!![1]}) --- ${fftFXBoundsLow[0]} --- ${fftFXBoundsHigh[0]}"
-                    )
+//                    Log.i(
+//                        "asdf",
+//                        "bass: ${fftSmooth!![1]} (${fft!![1]}) --- ${fftFXBoundsLow[0]} --- ${fftFXBoundsHigh[0]}"
+//                    )
 
-                    val processedData = byteArrayOf(
+//                    val processedData = byteArrayOf(
+//                        //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
+//                        (sampleFFT(fft!!, 0, 0, 2, 1.5f).toDouble() * 255).toByte(),
+//                        (sampleFFT(fft!!, 1, 2, 6, 1.5f).toDouble() * 255).toByte(),
+//                        (sampleFFT(fft!!, 2, 6, 24, 1.5f).toDouble() * 255).toByte(),
+//                        (sampleFFT(fft!!, 3, 24, 64, 1.5f).toDouble() * 255).toByte(),
+//                        (sampleFFT(fft!!, 4, 64, 256, 1.5f).toDouble() * 255).toByte(),
+//                        (sampleFFT(fft!!, 5, 256, 512, 1.5f).toDouble() * 255).toByte()
+//                    )
+
+                    val processedData = floatArrayOf(
                         //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
-                        (sampleFFT(fftSmooth!!, 0, 0, 2, 0.8f).toDouble() * 255).toByte(),
-                        (sampleFFT(fftSmooth!!, 1, 4, 12, 0.8f).toDouble() * 255).toByte(),
-                        (sampleFFT(fftSmooth!!, 2, 12, 32, 0.8f).toDouble() * 255).toByte(),
-                        (sampleFFT(fftSmooth!!, 3, 32, 64, 0.8f).toDouble() * 255).toByte(),
-                        (sampleFFT(fftSmooth!!, 4, 64, 256, 0.8f).toDouble() * 255).toByte(),
-                        (sampleFFT(fftSmooth!!, 5, 256, 512, 0.8f).toDouble() * 255).toByte()
+                        sampleFFT(fft!!, 0, 0, 2, 1.4f),
+                        sampleFFT(fft!!, 1, 2, 6, 1.4f),
+                        sampleFFT(fft!!, 2, 6, 24, 1.4f),
+                        sampleFFT(fft!!, 3, 24, 64, 1.3f),
+                        sampleFFT(fft!!, 4, 64, 256, 1.3f),
+                        sampleFFT(fft!!, 5, 256, 512, 1.3f)
                     )
+
+                    for (i in 0 until FFT_FX_SIZE) {
+                        fftSmooth[i] += (processedData[i] - fftSmooth[i]) * min(
+                            1.0f,
+                            fftFXFrametime * 7.0f
+                        )
+                        val hasBeat = fftSmooth[i] >= 0.5f
+//                        fftBeat[i] = (fftSmooth[i] * 255).toByte()
+                        fftBeat[i] = if (hasBeat) 255.toByte() else 0
+
+                        if (hasBeat) {
+                            fftFXLightTimer[i] = 0.05f
+                        } else {
+                            if (fftFXLightTimer[i] > 0.0f) {
+                                fftBeat[i] = 255.toByte()
+                                fftFXLightTimer[i] -= fftFXFrametime
+                            }
+                        }
+                    }
 
 //                    Log.i("asdf", "low: ${processedData[0]}")
 
@@ -378,7 +493,7 @@ class BLEService : Service() {
 //                    }
 
                     listeners.forEach { listener ->
-                        listener.receiveProcessedAudio(processedData)
+                        listener.receiveProcessedAudio(fftBeat)
                     }
                 }
 
