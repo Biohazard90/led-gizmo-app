@@ -17,7 +17,9 @@ object Effects {
         2 to R.string.effect_opaque,
         3 to R.string.effect_gradient,
         4 to R.string.effect_test,
-        5 to R.string.effect_visualizer
+        5 to R.string.effect_visualizer,
+        6 to R.string.effect_pulse,
+        7 to R.string.effect_sparkle
     )
 
     fun getEffectTitle(effectNameId: UByte, context: Context?): String {
@@ -30,7 +32,9 @@ object Effects {
         2 to R.string.category_opaque_settings,
         3 to R.string.category_gradient_settings,
         4 to R.string.category_test_settings,
-        5 to R.string.category_visualizer_settings
+        5 to R.string.category_visualizer_settings,
+        6 to R.string.category_pulse_settings,
+        7 to R.string.category_sparkle_settings
     )
 
     fun getEffectSettingCategoryTitle(effectNameId: UByte, context: Context?): String {

@@ -261,18 +261,10 @@ class CollarSettingsActivity : AppCompatActivity(),
                         effectList[i] = typeInfo[3 + i].toInt()
 
                         if (i == typeInfo[0].toInt()) {
-                            selectedEffect = i //effectList[i].toInt()
+                            selectedEffect = i
                         }
-//                        if (Effects.visualizerEffectNames.contains(effectList[i])) {
-//                            visualizerIndices.add(i)
-//                        }
                     }
 
-
-                    // Figure out which effects are visualizers
-
-//                    val currentType = characteristic?.value?.get(0)?.toInt() ?: 0
-//                    val effectUUID = Effects.effectIndexToUUID[currentType]
                     runOnUiThread {
                         wrappedReadCharacteristic(
                             ledService?.getCharacteristic(
@@ -286,25 +278,6 @@ class CollarSettingsActivity : AppCompatActivity(),
                         loadPreferenceMenu(selectedEffect, effectList)
                     }
                 }
-
-//                BLEConstants.LEDBlinkSettingsCharacteristic,
-//                BLEConstants.LEDWaveSettingsCharacteristic,
-//                BLEConstants.LEDColorWheelSettingsCharacteristic,
-//                BLEConstants.LEDVisualizerSettingsCharacteristic,
-//                BLEConstants.LEDVisorSettingsCharacteristic,
-//                BLEConstants.LEDPoliceSettingsCharacteristic,
-//                BLEConstants.LEDChristmasSettingsCharacteristic -> {
-//                    val value = characteristic?.value!!
-//                    runOnUiThread {
-//                        currentEffectCharacteristic = characteristic
-//                        currentEffectId = characteristic?.uuid
-//                        currentEffectSettings = value
-//                        loadPreferenceMenu(Effects.effectUUIDToResource[currentEffectId]!!, value)
-//                        updateVisualizerStreamEnabled()
-//                    }
-//                }
-//
-//                else -> throw Exception()
             }
 
             if (characteristic?.uuid.toString().startsWith(BLEConstants.strLEDEffectSettingsCharacteristicBase)) {
@@ -317,7 +290,7 @@ class CollarSettingsActivity : AppCompatActivity(),
                     loadPreferenceMenu(
                         currentEffectIndex,
                         value
-                    ) //currentEffectId.toString().substringAfter(), value)
+                    )
                     updateVisualizerStreamEnabled()
                 }
             }
@@ -421,7 +394,6 @@ class CollarLoadingFragment : PreferenceFragmentCompat() {
 class CollarEffectsFragment : PreferenceFragmentCompat() {
     private var listener: OnFragmentPreferenceChanged? = null
     private var listenerUpdateEnabled = true
-    //    private var keyValueOffsets = HashMap<String, Int>()
     var preferenceListener = object : SharedPreferences.OnSharedPreferenceChangeListener {
         override fun onSharedPreferenceChanged(
             sharedPreferences: SharedPreferences,
@@ -434,11 +406,6 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                 return
             }
 
-//            if (!keyValueOffsets.containsKey(key)) {
-//                return
-//            }
-//
-//            var offset = keyValueOffsets[key]!!
             var success = false
             try {
                 val value = sharedPreferences.getInt(key, 0xFF0000)
@@ -529,7 +496,6 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                         val r = itr.next()
                         val g = itr.next()
                         val b = itr.next()
-//                        keyValueOffsets[key] = valueOffset + 2
                         valueOffset += 5
 
                         val attr = android.util.Xml.asAttributeSet(parser)
@@ -547,7 +513,6 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                         val value = itr.next().toUByte().toInt()
                         val vMin = itr.next().toUByte().toInt()
                         val vMax = itr.next().toUByte().toInt()
-//                        keyValueOffsets[key] = valueOffset + 2
                         valueOffset += 5
 
                         val attr = android.util.Xml.asAttributeSet(parser)
@@ -566,7 +531,6 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
                     3 -> { // Checkbox
                         val name = itr.next().toUByte()
                         val value = itr.next().toInt()
-//                        keyValueOffsets[key] = valueOffset + 2
                         valueOffset += 3
 
                         val attr = android.util.Xml.asAttributeSet(parser)

@@ -44,6 +44,10 @@
     <string name="category_test_settings">Test settings</string>
     <string name="effect_visualizer">Visualizer</string>
     <string name="category_visualizer_settings">Visualizer settings</string>
+    <string name="effect_pulse">Pulse</string>
+    <string name="category_pulse_settings">Pulse settings</string>
+    <string name="effect_sparkle">Sparkle</string>
+    <string name="category_sparkle_settings">Sparkle settings</string>
 
     <!-- Service -->
     <string name="service_title">LED Visualizer</string>
