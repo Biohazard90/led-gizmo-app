@@ -50,7 +50,7 @@
     <string name="category_sparkle_settings">Sparkle settings</string>
 
     <!-- Service -->
-    <string name="service_title">LED Visualizer</string>
-    <string name="service_content">Audio visualizer for LEDs</string>
+    <string name="service_title">GLED Audio Visualizer</string>
+    <string name="service_content">Connected devices: %1$s</string>
     <string name="service_stop">Stop visualizer</string>
 </resources>

@@ -35,16 +35,16 @@ class CollarsAdapter(val items: ArrayList<Collar>, val context: Context) :
         ///////////////////////////////////////////
         // DEBUG auto select first device
         ///////////////////////////////////////////
-        if (collar?.device != null) {
-            val stopScannerIntent = Intent("STOPSCANNER")
-            context.sendBroadcast(stopScannerIntent)
-
-            val intent = Intent(context, CollarSettingsActivity::class.java).apply {
-                putExtra("collarName", collar?.name)
-                putExtra("collarDevice", collar?.device)
-            }
-            context.startActivity(intent)
-        }
+//        if (collar?.device != null) {
+//            val stopScannerIntent = Intent("STOPSCANNER")
+//            context.sendBroadcast(stopScannerIntent)
+//
+//            val intent = Intent(context, CollarSettingsActivity::class.java).apply {
+//                putExtra("collarName", collar?.name)
+//                putExtra("collarDevice", collar?.device)
+//            }
+//            context.startActivity(intent)
+//        }
     }
 }
 

@@ -1,10 +1,12 @@
 package com.kristjanskutta.gizmoled
 
 import android.Manifest
+import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.*
@@ -179,6 +181,10 @@ class MainActivity : AppCompatActivity() {
             collars.clear()
         }
 
+        if (knownCollars.contains(device.address)) {
+            return
+        }
+
         knownCollars.add(device.address)
 
         val nCollar = Collar(device, device.name!!, connected)
@@ -196,7 +202,7 @@ class MainActivity : AppCompatActivity() {
             addFoundCollar(collar, true)
         }
 
-        return !connectedCollars.isEmpty()
+        return connectedCollars.isNotEmpty()
     }
 
     private fun stopScanningAndClear() {
@@ -219,9 +225,13 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            if (result.scanRecord?.serviceUuids?.contains(ParcelUuid(BLEConstants.LEDService)) != true) {
+            val services = result.scanRecord?.serviceUuids
+            if (services?.contains(ParcelUuid(BLEConstants.LEDService)) != true &&
+                services?.contains(ParcelUuid(BLEConstants.LEDServiceV)) != true) {
                 return
             }
+
+//            val test = result?.scanRecord?.getManufacturerSpecificData()
 
             if (callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES) {
                 addFoundCollar(device, false)
@@ -260,11 +270,32 @@ class MainActivity : AppCompatActivity() {
                     }
                 }, SCAN_PERIOD)
                 mScanning = true
-                bluetoothLeScanner.startScan(mLeScanCallback)
 
-//            val connectedDevices = .devices()
+//                val scanFilters = listOf(
+//                    ScanFilter.Builder()
+//                        .setServiceUuid(ParcelUuid(BLEConstants.LEDService))
+//                        .build()
+//                )
+
+                bluetoothLeScanner.startScan(
+//                    scanFilters,
+//                    ScanSettings.Builder()
+//                        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+//                        .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+//                        .build(),
+                    mLeScanCallback
+                )
+
                 setListSearching()
                 addConnectedCollars()
+
+                Intent(this, BLEService::class.java).also { intent ->
+                    intent.putExtra(
+                        BLEService.INTENT_KEY_COMMAND,
+                        BLEService.COMMAND_CONTINUE_BACKGROUND_SCAN
+                    )
+                    startService(intent)
+                }
             } else {
                 mScanning = false
                 bluetoothLeScanner.stopScan(mLeScanCallback)

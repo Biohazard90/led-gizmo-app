@@ -165,30 +165,36 @@ class CollarSettingsActivity : AppCompatActivity(),
                     ) ?: -1
                 )
 
-        if (shouldEnableStream) {
-            if (BLEService.needsPermissions(this)) {
-                ActivityCompat.requestPermissions(
-                    this, BLEService.getPermissionList(), PERMISSION_REQUEST_RECORD_AUDIO
-                )
-            } else {
-                // Enable stream
-                Intent(this, BLEService::class.java).also { intent ->
-                    intent.putExtra(
-                        BLEService.INTENT_KEY_COMMAND,
-                        BLEService.COMMAND_REGISTER_DEVICE
-                    )
-                    intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
-                    startService(intent)
-                }
-            }
-        } else {
-            // Disable stream
-            Intent(this, BLEService::class.java).also { intent ->
-                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_UNREGISTER_DEVICE)
-                intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
-                startService(intent)
-            }
+        if (shouldEnableStream && BLEService.needsPermissions(this)) {
+            ActivityCompat.requestPermissions(
+                this, BLEService.getPermissionList(), PERMISSION_REQUEST_RECORD_AUDIO
+            )
         }
+
+//        if (shouldEnableStream) {
+//            if (BLEService.needsPermissions(this)) {
+//                ActivityCompat.requestPermissions(
+//                    this, BLEService.getPermissionList(), PERMISSION_REQUEST_RECORD_AUDIO
+//                )
+//            } else {
+//                // Enable stream
+//                Intent(this, BLEService::class.java).also { intent ->
+//                    intent.putExtra(
+//                        BLEService.INTENT_KEY_COMMAND,
+//                        BLEService.COMMAND_REGISTER_DEVICE
+//                    )
+//                    intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+//                    startService(intent)
+//                }
+//            }
+//        } else {
+//            // Disable stream
+//            Intent(this, BLEService::class.java).also { intent ->
+//                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_UNREGISTER_DEVICE)
+//                intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+//                startService(intent)
+//            }
+//        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -353,7 +359,8 @@ class CollarSettingsActivity : AppCompatActivity(),
             if (currentEffectList == null ||
                 effectIndex < 0 ||
                 effectIndex >= currentEffectList!!.size ||
-                effectIndex == currentEffectIndex) {
+                effectIndex == currentEffectIndex
+            ) {
                 return
             }
             // Update LED type on device
