@@ -3,12 +3,19 @@
     <string name="action_settings">Settings</string>
     <string name="action_dev_test_visualizer">DEV Test Visualizer</string>
     <string name="action_reset">Reset</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_stop_service">Stop Service</string>
+    <string name="action_start_service">Start Service</string>
+
     <string name="device_searching">Searching Collars…</string>
     <string name="device_nothing_found">No Collars found!</string>
     <string name="confirm">OK</string>
     <string name="cancel">Cancel</string>
     <string name="connected">(connected)</string>
     <string name="device_lost">Device lost</string>
+    <string name="dialog_title_rename_device">Rename Gizmo</string>
+    <string name="dialog_device_name">Name</string>
+    <string name="dialog_device_name_empty_validation">Enter a name</string>
 
     <!-- Collar Preferences -->
     <string name="led_type_title">LED Effect Type</string>

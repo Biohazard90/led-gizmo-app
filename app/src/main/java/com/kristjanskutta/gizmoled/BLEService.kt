@@ -110,8 +110,13 @@ class BLEService : Service() {
         var bluetoothLeScanner: BluetoothLeScanner? = null
         var audioTimeNotPlaying = 0
         var wasAudioPlaying = false
+        var isStopping = false
 
         private fun updateNotification() {
+            if (isStopping) {
+                return
+            }
+
             callbacksLock.lock()
             val device = if (devices.keys.isEmpty()) null else devices.keys.first()
             val deviceCount = devices.size
@@ -140,7 +145,6 @@ class BLEService : Service() {
             mNotificationManager.notify(SERVICE_NOTIF_ID, notification)
         }
 
-
         private fun shouldStopVisualizer(): Boolean {
             // No active devices or callbacks listening
             callbacksLock.lock()
@@ -162,7 +166,7 @@ class BLEService : Service() {
 
         private fun stopService() {
             audioProcessor.shutdown()
-            stopSelf()
+            stopForeground(true)
         }
 
         private fun performStopChecks() {
@@ -171,6 +175,7 @@ class BLEService : Service() {
                 gattWrapper.close()
             }
             if (shouldStopService()) {
+                isStopping = true
                 stopService()
             }
             callbacksLock.unlock()
@@ -327,7 +332,6 @@ class BLEService : Service() {
                 }
 
                 COMMAND_END_BACKGROUND_SCAN -> {
-
                     this@ServiceHandler.removeMessages(COMMAND_CONTINUE_BACKGROUND_SCAN)
                     callbacksLock.lock()
                     isScanningForEndpoints = false
@@ -674,7 +678,7 @@ class BLEService : Service() {
         val device: BluetoothDevice? = intent.extras?.get(INTENT_KEY_DEVICE) as? BluetoothDevice
         val audioCallback: String? = intent.extras?.get(INTENT_KEY_CALLBACK) as? String
 
-        var deviceCount = 0
+        var deviceCount: Int
 
         callbacksLock.lock()
         if (device != null) {
@@ -734,7 +738,6 @@ class BLEService : Service() {
             val notification = getBLENotification(pendingIntent, isProcessingAudio, deviceCount)
             startForeground(SERVICE_NOTIF_ID, notification)
         }
-
 
         return START_NOT_STICKY
     }

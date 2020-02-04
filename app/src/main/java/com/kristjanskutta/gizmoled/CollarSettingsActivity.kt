@@ -18,8 +18,10 @@ import android.bluetooth.BluetoothGattCharacteristic.FORMAT_UINT8
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.EditText
 import androidx.core.app.ActivityCompat
 import androidx.preference.*
+import com.google.android.material.textfield.TextInputEditText
 import com.jaredrummler.android.colorpicker.ColorPreferenceCompat
 import org.xmlpull.v1.XmlPullParser
 
@@ -36,6 +38,10 @@ class CollarSettingsActivity : AppCompatActivity(),
     PreferenceFragmentCompat.OnPreferenceStartFragmentCallback,
     OnFragmentPreferenceChanged {
 
+    companion object {
+        var lastResetCall = 0
+    }
+
     private val PERMISSION_REQUEST_RECORD_AUDIO = 6001
 
     var device: BluetoothDevice? = null
@@ -44,7 +50,6 @@ class CollarSettingsActivity : AppCompatActivity(),
     var currentEffectIndex = 0
     var currentEffectSettings: ByteArray? = null
     var currentEffectList: IntArray? = null
-    var lastResetCall = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,9 +70,13 @@ class CollarSettingsActivity : AppCompatActivity(),
 //        }
 
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        setTitle(name + " Settings")
 
+        updateTitle(name)
 //        createPreferenceListener()
+    }
+
+    fun updateTitle(name: String?) {
+        title = "$name Settings"
     }
 
     override fun onResume() {
@@ -88,22 +97,34 @@ class CollarSettingsActivity : AppCompatActivity(),
         return true
     }
 
+    private fun callRemoteFunction(index: Byte, args: ByteArray?) {
+        var newValue = byteArrayOf((++lastResetCall).toByte(), index)
+        if (args != null) {
+            newValue += args!!
+        }
+
+        val fnResetCharacteristic =
+            ledService?.getCharacteristic(BLEConstants.FnCallCharacteristic)
+        fnResetCharacteristic?.value = newValue
+        gattWrapper.wrappedWriteCharacteristic(fnResetCharacteristic)
+
+        if (lastResetCall > 255) {
+            lastResetCall = 1
+        }
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_reset -> {
-                val fnResetCharacteristic =
-                    ledService?.getCharacteristic(BLEConstants.FnResetCharacteristic)
-                val newValue = byteArrayOf((++lastResetCall).toByte(), currentEffectIndex.toByte())
-                fnResetCharacteristic?.value = newValue
-                gattWrapper.wrappedWriteCharacteristic(fnResetCharacteristic)
-
-                if (lastResetCall > 255) {
-                    lastResetCall = 1
-                }
+                callRemoteFunction(0, byteArrayOf(currentEffectIndex.toByte()))
 
                 loadPreferenceMenu(currentEffectIndex)
                 gattWrapper.wrappedReadCharacteristic(currentEffectCharacteristic)
-                return true
+                true
+            }
+            R.id.action_rename -> {
+                showRenameDeviceDialog()
+                true
             }
             else -> super.onOptionsItemSelected(item)
         }
@@ -169,6 +190,12 @@ class CollarSettingsActivity : AppCompatActivity(),
             ActivityCompat.requestPermissions(
                 this, BLEService.getPermissionList(), PERMISSION_REQUEST_RECORD_AUDIO
             )
+        } else if (!shouldEnableStream) {
+            Intent(this, BLEService::class.java).also { intent ->
+                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_UNREGISTER_DEVICE)
+                intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+                startService(intent)
+            }
         }
 
 //        if (shouldEnableStream) {
@@ -349,7 +376,7 @@ class CollarSettingsActivity : AppCompatActivity(),
             }
 
             currentEffectCharacteristic?.value = currentEffectSettings
-            gattWrapper?.wrappedWriteCharacteristic(currentEffectCharacteristic)
+            gattWrapper.wrappedWriteCharacteristic(currentEffectCharacteristic)
         }
     }
 
@@ -367,7 +394,7 @@ class CollarSettingsActivity : AppCompatActivity(),
             val ledTypeCharacteristic =
                 ledService?.getCharacteristic(BLEConstants.LEDTypeCharacteristic)
             ledTypeCharacteristic?.setValue(effectIndex, FORMAT_UINT8, 0)
-            gattWrapper?.wrappedWriteCharacteristic(ledTypeCharacteristic)
+            gattWrapper.wrappedWriteCharacteristic(ledTypeCharacteristic)
 
             currentEffectIndex = effectIndex
             loadPreferenceMenu(effectIndex)
@@ -375,7 +402,7 @@ class CollarSettingsActivity : AppCompatActivity(),
             // Load new effect data
             val newEffectCharacteristic =
                 ledService?.getCharacteristic(Effects.getEffectIndexCharacteristicUUID(effectIndex))
-            gattWrapper?.wrappedReadCharacteristic(newEffectCharacteristic)
+            gattWrapper.wrappedReadCharacteristic(newEffectCharacteristic)
             return
         }
     }
@@ -388,7 +415,43 @@ class CollarSettingsActivity : AppCompatActivity(),
         }
         currentEffectSettings!![offset] = if (value) 1 else 0
         currentEffectCharacteristic?.value = currentEffectSettings
-        gattWrapper?.wrappedWriteCharacteristic(currentEffectCharacteristic)
+        gattWrapper.wrappedWriteCharacteristic(currentEffectCharacteristic)
+    }
+
+    fun showRenameDeviceDialog() {
+        val context = this
+        val builder = AlertDialog.Builder(context)
+        builder.setTitle(getString(R.string.dialog_title_rename_device))
+
+        val view = layoutInflater.inflate(R.layout.dialog_rename_device, null)
+        val deviceNameInput = view.findViewById(R.id.deviceName) as TextInputEditText
+
+        deviceNameInput.setText(device?.name)
+
+        builder.setView(view)
+
+        // set up the ok button
+        builder.setPositiveButton(android.R.string.ok) { dialog, p1 ->
+            val inputText = deviceNameInput.text
+//            var isValid = true
+//            if (inputText?.isBlank() != false) {
+//                deviceNameInput.error = getString(R.string.dialog_device_name_empty_validation)
+//                isValid = false
+//            }
+
+//            if (isValid) {
+            val newName = inputText.toString()
+            updateTitle(newName)
+            callRemoteFunction(1, newName.toByteArray())
+            dialog.dismiss()
+//            }
+        }
+
+        builder.setNegativeButton(android.R.string.cancel) { dialog, p1 ->
+            dialog.cancel()
+        }
+
+        builder.show()
     }
 }
 
@@ -433,7 +496,7 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
             if (!success) {
                 try {
                     val value = sharedPreferences.getBoolean(key, false)
-                    listener?.onFragmentPreferenceChanged(key, value!!)
+                    listener?.onFragmentPreferenceChanged(key, value)
                     //success = true
                 } catch (e: ClassCastException) {
                 }

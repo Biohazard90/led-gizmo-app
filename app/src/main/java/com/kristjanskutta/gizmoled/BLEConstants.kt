@@ -21,5 +21,5 @@ object BLEConstants {
 
     // Upstream
     val AudioDataCharacteristic = UUID.fromString("e8942ca1-d9e7-4c45-b96c-20cf850bfa00")
-    val FnResetCharacteristic = UUID.fromString("e8942ca1-d9e7-4c45-b96c-20cf850bfa01")
+    val FnCallCharacteristic = UUID.fromString("e8942ca1-d9e7-4c45-b96c-20cf850bfa01")
 }

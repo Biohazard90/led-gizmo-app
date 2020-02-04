@@ -12,11 +12,14 @@ import android.bluetooth.le.ScanSettings
 import android.content.*
 import android.content.pm.PackageManager
 import android.os.*
+import android.view.ContextMenu
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.content_main.*
@@ -29,6 +32,9 @@ class MainActivity : AppCompatActivity() {
     private val PERMISSION_REQUEST_ALL = 5001
     private val handler: Handler = Handler(Looper.getMainLooper())
     private var bleBinder: BLEService.BLEBinder? = null
+    private var useBGService = true
+
+    private val PREF_USE_SERVICE_KEY = "serviceEnabled"
 
     val collars: ArrayList<Collar> = ArrayList()
     val knownCollars: MutableSet<String> = HashSet()
@@ -50,6 +56,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        useBGService =
+            PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_USE_SERVICE_KEY, useBGService)
+
         setContentView(R.layout.activity_main)
         setSupportActionBar(toolbar)
 
@@ -118,18 +128,23 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        bleBinder = null
         registerReceiver(bleReceiver, IntentFilter("STOPSCANNER"))
         scanLeDevice(true)
 
-        val bindIntent = Intent(this, BLEService::class.java)
-        bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+        if (bleBinder == null) {
+            val bindIntent = Intent(this, BLEService::class.java)
+            bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+        }
     }
 
     override fun onPause() {
         scanLeDevice(false)
         unregisterReceiver(bleReceiver)
-        unbindService(serviceConnection)
+        if (bleBinder != null) {
+            unbindService(serviceConnection)
+            bleBinder = null
+        }
+
         super.onPause()
     }
 
@@ -154,7 +169,45 @@ class MainActivity : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         // Inflate the menu; this adds items to the action bar if it is present.
         menuInflater.inflate(R.menu.menu_main, menu)
+
+        val serviceIsRunning = useBGService
+        val stopOption = menu.findItem(R.id.action_stop_service)
+        val startOption = menu.findItem(R.id.action_start_service)
+        stopOption?.isVisible = serviceIsRunning
+        startOption?.isVisible = !serviceIsRunning && bluetoothAdapter?.bluetoothLeScanner != null
         return true
+    }
+
+    private fun startBGService() {
+        if (!useBGService) {
+            return
+        }
+        if (bleBinder == null) {
+            val bindIntent = Intent(this, BLEService::class.java)
+            bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+        }
+        Intent(this, BLEService::class.java).also { intent ->
+            intent.putExtra(
+                BLEService.INTENT_KEY_COMMAND,
+                BLEService.COMMAND_CONTINUE_BACKGROUND_SCAN
+            )
+            startService(intent)
+        }
+    }
+
+    private fun stopBGService() {
+        if (bleBinder != null) {
+            unbindService(serviceConnection)
+            bleBinder = null
+        }
+        Intent(this@MainActivity, BLEService::class.java).also { intent ->
+            intent.putExtra(
+                BLEService.INTENT_KEY_COMMAND,
+                BLEService.COMMAND_END_BACKGROUND_SCAN
+            )
+            startService(intent)
+        }
+        invalidateOptionsMenu()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -168,6 +221,20 @@ class MainActivity : AppCompatActivity() {
                 stopScanningAndClear()
                 val intent = Intent(this, DevVisualizerActivity::class.java)
                 startActivity(intent)
+                true
+            }
+            R.id.action_stop_service -> {
+                useBGService = false
+                PreferenceManager.getDefaultSharedPreferences(this).edit()
+                    .putBoolean(PREF_USE_SERVICE_KEY, useBGService).apply()
+                stopBGService()
+                true
+            }
+            R.id.action_start_service -> {
+                useBGService = true
+                PreferenceManager.getDefaultSharedPreferences(this).edit()
+                    .putBoolean(PREF_USE_SERVICE_KEY, useBGService).apply()
+                startBGService()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -227,7 +294,8 @@ class MainActivity : AppCompatActivity() {
 
             val services = result.scanRecord?.serviceUuids
             if (services?.contains(ParcelUuid(BLEConstants.LEDService)) != true &&
-                services?.contains(ParcelUuid(BLEConstants.LEDServiceV)) != true) {
+                services?.contains(ParcelUuid(BLEConstants.LEDServiceV)) != true
+            ) {
                 return
             }
 
@@ -271,31 +339,12 @@ class MainActivity : AppCompatActivity() {
                 }, SCAN_PERIOD)
                 mScanning = true
 
-//                val scanFilters = listOf(
-//                    ScanFilter.Builder()
-//                        .setServiceUuid(ParcelUuid(BLEConstants.LEDService))
-//                        .build()
-//                )
+                startBGService()
 
-                bluetoothLeScanner.startScan(
-//                    scanFilters,
-//                    ScanSettings.Builder()
-//                        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-//                        .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-//                        .build(),
-                    mLeScanCallback
-                )
+                bluetoothLeScanner.startScan(mLeScanCallback)
 
                 setListSearching()
                 addConnectedCollars()
-
-                Intent(this, BLEService::class.java).also { intent ->
-                    intent.putExtra(
-                        BLEService.INTENT_KEY_COMMAND,
-                        BLEService.COMMAND_CONTINUE_BACKGROUND_SCAN
-                    )
-                    startService(intent)
-                }
             } else {
                 mScanning = false
                 bluetoothLeScanner.stopScan(mLeScanCallback)
@@ -310,10 +359,10 @@ class MainActivity : AppCompatActivity() {
         ) {
             bleBinder = binder as BLEService.BLEBinder
             addConnectedCollars()
+            invalidateOptionsMenu()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            bleBinder = null
         }
     }
 
