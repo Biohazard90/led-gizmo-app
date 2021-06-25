@@ -11,15 +11,16 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.audiofx.Visualizer
-import android.media.audiofx.Visualizer.MEASUREMENT_MODE_PEAK_RMS
 import android.os.*
 import android.os.Process.THREAD_PRIORITY_BACKGROUND
 import androidx.core.content.ContextCompat
+import androidx.preference.PreferenceManager
 import java.util.*
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
+import kotlin.experimental.or
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -42,17 +43,28 @@ class BLEService : Service() {
     companion object {
         val COMMAND_REGISTER_DEVICE = 1000
         val COMMAND_UNREGISTER_DEVICE = 1001
+
         val COMMAND_REGISTER_CALLBACK = 1002
         val COMMAND_UNREGISTER_CALLBACK = 1003
         // val COMMAND_BEGIN_BACKGROUND_SCAN = 1004
-        val COMMAND_END_BACKGROUND_SCAN = 1005
+
+        // Connect known devices when music starts and show notification
+        val COMMAND_START_CONTINUOUS_SERVICE = 1005
+        val COMMAND_END_CONTINUOUS_SERVICE = 1006
         val COMMAND_CONTINUE_BACKGROUND_SCAN = 1007
+        // Assuming that the service is active, scan for visualizer devices now because
+        // the activity is the foreground and scanning will work now
+//        val COMMAND_BLE_SCAN = 1008
+        val COMMAND_ADD_KNOWN_DEVICE = 1008
+        val COMMAND_REMOVE_KNOWN_DEVICE = 1009
 
         val INTENT_KEY_COMMAND = "cmd"
         val INTENT_KEY_DEVICE = "device"
         val INTENT_KEY_CALLBACK = "callback"
 
         val SERVICE_NOTIF_ID = 99
+
+        private val PREF_PERSISTED_DEVICES = "persistedDevices"
 
         fun needsPermissions(context: Context): Boolean {
             return ContextCompat.checkSelfPermission(
@@ -92,22 +104,47 @@ class BLEService : Service() {
     private var serviceLooper: Looper? = null
     private var serviceHandler: ServiceHandler? = null
     //    private val devicesLock: Lock = ReentrantLock()
-    private val devices =
-        HashMap<BluetoothDevice, Int>() //: Deque<BluetoothDevice> = LinkedList<BluetoothDevice>()
+    private val knownDevices = ArrayList<BluetoothDevice>()
+    private val connectedDevices = HashMap<BluetoothDevice, Int>()
     private var isScanningForEndpoints = false
     private var isProcessingAudio = false
 
     fun getDevices(): List<BluetoothDevice> {
         callbacksLock.lock()
-        val devicesCopy = devices.map { e -> e.key }.toList()
+        val devicesCopy = connectedDevices.map { e -> e.key }.toList()
         callbacksLock.unlock()
         return devicesCopy
     }
 
+    private fun getPersistedDevices(): MutableSet<String> {
+        return PreferenceManager.getDefaultSharedPreferences(this@BLEService)
+            .getStringSet(PREF_PERSISTED_DEVICES, HashSet<String>())!!
+    }
+
+    private fun savePersistedDevices(persistedDevices: Set<String>?) {
+        PreferenceManager.getDefaultSharedPreferences(this@BLEService).edit()
+            .putStringSet(PREF_PERSISTED_DEVICES, persistedDevices).apply()
+    }
+
+    private fun addPersistedDevice(device: BluetoothDevice?) {
+        if (device != null) {
+            val x = getPersistedDevices()
+            x.add(device.address)
+            savePersistedDevices(x)
+        }
+    }
+
+    private fun removePersistedDevice(device: BluetoothDevice?) {
+        if (device != null) {
+            val x = getPersistedDevices()
+            x.remove(device.address)
+            savePersistedDevices(x)
+        }
+    }
+
     // Handler that receives messages from the thread
-    private inner class ServiceHandler(looper: Looper, context: Context) : Handler(looper) {
-        var context: Context = context
-        var bluetoothLeScanner: BluetoothLeScanner? = null
+    private inner class ServiceHandler(looper: Looper, var context: Context) : Handler(looper) {
+        //        var bluetoothLeScanner: BluetoothLeScanner? = null
         var audioTimeNotPlaying = 0
         var wasAudioPlaying = false
         var isStopping = false
@@ -118,15 +155,16 @@ class BLEService : Service() {
             }
 
             callbacksLock.lock()
-            val device = if (devices.keys.isEmpty()) null else devices.keys.first()
-            val deviceCount = devices.size
+            val device =
+                if (connectedDevices.keys.isEmpty()) null else connectedDevices.keys.first()
+            val deviceCount = connectedDevices.size
             callbacksLock.unlock()
 
-            var pendingIntent: PendingIntent?
+            val pendingIntent: PendingIntent?
             if (device != null) {
                 pendingIntent =
                     Intent(context, CollarSettingsActivity::class.java).let { notificationIntent ->
-                        notificationIntent.putExtra("collarName", device?.name!!)
+                        notificationIntent.putExtra("collarName", device.name!!)
                         notificationIntent.putExtra("collarDevice", device)
                         TaskStackBuilder.create(context)
                             .addNextIntentWithParentStack(notificationIntent)
@@ -148,8 +186,7 @@ class BLEService : Service() {
         private fun shouldStopVisualizer(): Boolean {
             // No active devices or callbacks listening
             callbacksLock.lock()
-            val result = devices.isEmpty() &&
-                    callbacks.isEmpty()
+            val result = connectedDevices.isEmpty() && callbacks.isEmpty()
             callbacksLock.unlock()
             return result
         }
@@ -165,7 +202,9 @@ class BLEService : Service() {
         }
 
         private fun stopService() {
+//            stopBLEBGScanner()
             audioProcessor.shutdown()
+            gattWrapper.close()
             stopForeground(true)
         }
 
@@ -183,73 +222,114 @@ class BLEService : Service() {
 
         private fun getScanFilters(): List<ScanFilter> {
             return listOf(
-                ScanFilter.Builder()
+                ScanFilter
+                    .Builder()
                     .setServiceUuid(ParcelUuid(BLEConstants.LEDServiceV))
                     .build()
             )
         }
 
-        private val bgScanCallback: ScanCallback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult?) {
-                if (result?.scanRecord == null || result?.device == null || result?.device?.name == null) {
-                    return
-                }
+//        private val bgScanCallback: ScanCallback = object : ScanCallback() {
+//            override fun onScanResult(callbackType: Int, result: ScanResult?) {
+//                if (result?.scanRecord == null || result.device == null || result.device?.name == null) {
+//                    return
+//                }
+//
+////                if (result.scanRecord?.serviceUuids?.contains(ParcelUuid(BLEConstants.LEDServiceV)) != true) {
+////                    return
+////                }
+//
+//                val device = result.device!!
+//
+////                Log.i("asdf", "bg scan: $device")
+//
+//                if (callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES) {
+//                    this@ServiceHandler.obtainMessage().also { msg ->
+//                        msg.what = COMMAND_REGISTER_DEVICE
+//                        msg.obj = device
+//                        serviceHandler?.sendMessage(msg)
+//                    }
+//                } else if (callbackType == ScanSettings.CALLBACK_TYPE_MATCH_LOST) {
+//                    this@ServiceHandler.obtainMessage().also { msg ->
+//                        msg.what = COMMAND_UNREGISTER_DEVICE
+//                        msg.obj = device
+//                        serviceHandler?.sendMessage(msg)
+//                    }
+//                }
+//            }
+//
+//            override fun onBatchScanResults(results: List<ScanResult?>?) {
+//            }
+//
+//            override fun onScanFailed(errorCode: Int) {
+//                this@ServiceHandler.obtainMessage().also { msg ->
+//                    msg.what = COMMAND_END_CONTINUOUS_SERVICE
+//                    serviceHandler?.sendMessage(msg)
+//                }
+//            }
+//        }
 
-                val device = result.device!!
+//        private fun stopBLEBGScanner() {
+        //wasAudioPlaying = false
+        //audioTimeNotPlaying = 0
 
-//                Log.i("asdf", "bg scan: $device")
+//            if (bluetoothLeScanner != null) {
+//                bluetoothLeScanner?.stopScan(bgScanCallback)
+//            }
+//        }
 
-                if (callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES) {
-                    serviceHandler?.obtainMessage()?.also { msg ->
-                        msg.what = COMMAND_REGISTER_DEVICE
-                        msg.obj = device
-                        serviceHandler?.sendMessage(msg)
-                    }
-                } else if (callbackType == ScanSettings.CALLBACK_TYPE_MATCH_LOST) {
-                    serviceHandler?.obtainMessage()?.also { msg ->
-                        msg.what = COMMAND_UNREGISTER_DEVICE
-                        msg.obj = device
-                        serviceHandler?.sendMessage(msg)
-                    }
-                }
-            }
-
-            override fun onBatchScanResults(results: List<ScanResult?>?) {
-            }
-
-            override fun onScanFailed(errorCode: Int) {
-                this@ServiceHandler.obtainMessage()?.also { msg ->
-                    msg.what = COMMAND_END_BACKGROUND_SCAN
-                    serviceHandler?.sendMessage(msg)
-                }
-            }
-        }
-
-        private fun stopBLEBGScanner() {
-            wasAudioPlaying = false
-            audioTimeNotPlaying = 0
-
-            if (bluetoothLeScanner != null) {
-                bluetoothLeScanner?.stopScan(bgScanCallback)
-                bluetoothLeScanner = null
-            }
+        private fun connectDevice(device: BluetoothDevice?) {
+            device?.connectGatt(
+                context,
+                true,
+                gattWrapper,
+                BluetoothDevice.TRANSPORT_LE
+            )
         }
 
         override fun handleMessage(msg: Message) {
             when (msg.what) {
+                COMMAND_ADD_KNOWN_DEVICE -> {
+                    val device: BluetoothDevice = msg.obj as BluetoothDevice
+
+                    if (knownDevices.contains(device)) {
+                        knownDevices.remove(device)
+                    } else if (wasAudioPlaying) {
+                        // If audio is playing, connect to this device right now
+                        connectDevice(device)
+                    }
+                    knownDevices.add(0, device)
+
+                    addPersistedDevice(device)
+                }
+
+                COMMAND_REMOVE_KNOWN_DEVICE -> {
+                    val device: BluetoothDevice = msg.obj as BluetoothDevice
+
+                    gattWrapper.close()
+                    removePersistedDevice(device)
+                    connectedDevices.remove(device)
+                    knownDevices.remove(device)
+                    // Remove from service list
+                    // Remove from persisted list
+                    // Disconnect
+                    // Remove from audio listeners
+//                    knownDevices.remove(device)
+                }
+
                 COMMAND_REGISTER_DEVICE -> {
                     val device: BluetoothDevice = msg.obj as BluetoothDevice
                     callbacksLock.lock()
-                    if (!devices.contains(device)) {
-                        devices[device] = 1
-                        device.connectGatt(
-                            context,
-                            false,
-                            gattWrapper,
-                            BluetoothDevice.TRANSPORT_LE
-                        )
+                    if (!connectedDevices.contains(device)) {
+                        connectedDevices[device] = 1
+//                        device.connectGatt(
+//                            context,
+//                            false,
+//                            gattWrapper,
+//                            BluetoothDevice.TRANSPORT_LE
+//                        )
                     } else {
-                        devices[device] = devices[device]!! + 1
+                        connectedDevices[device] = connectedDevices[device]!! + 1
                     }
                     callbacksLock.unlock()
                 }
@@ -258,15 +338,15 @@ class BLEService : Service() {
                     // Always remove the device, no matter how many references?
                     val device: BluetoothDevice = msg.obj as BluetoothDevice
                     callbacksLock.lock()
-                    if (devices.contains(device)) {
+                    if (connectedDevices.contains(device)) {
                         //val count = devices[device]!! - 1
                         //if (count == 0) {
-                        devices.remove(device)
+                        connectedDevices.remove(device)
                         //}
                     }
                     callbacksLock.unlock()
 
-                    performStopChecks()
+//                    performStopChecks()
                 }
 
                 COMMAND_REGISTER_CALLBACK -> {
@@ -288,6 +368,47 @@ class BLEService : Service() {
                     performStopChecks()
                 }
 
+                COMMAND_START_CONTINUOUS_SERVICE -> {
+                    val persistedDevices =
+                        PreferenceManager.getDefaultSharedPreferences(this@BLEService)
+                            .getStringSet(PREF_PERSISTED_DEVICES, HashSet<String>())
+
+                    val bluetoothAdapter =
+                        (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+                    persistedDevices?.forEach { p ->
+                        if (knownDevices.count { x -> x.address == p } == 0) {
+                            val remote = bluetoothAdapter.getRemoteDevice(p)
+                            knownDevices.add(remote)
+                        }
+                    }
+
+                    callbacksLock.lock()
+                    isStopping = false
+                    isScanningForEndpoints = true
+                    callbacksLock.unlock()
+
+                    this@ServiceHandler.removeMessages(COMMAND_CONTINUE_BACKGROUND_SCAN)
+                    this@ServiceHandler.obtainMessage().also { msg ->
+                        msg.what = COMMAND_CONTINUE_BACKGROUND_SCAN
+                        serviceHandler?.sendMessageDelayed(msg, 3000)
+                    }
+
+//                    if (bluetoothLeScanner == null) {
+//                        val bluetoothAdapter =
+//                            (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+//                        bluetoothLeScanner = bluetoothAdapter!!.bluetoothLeScanner
+//                    }
+//
+//                    bluetoothLeScanner?.startScan(
+//                        getScanFilters(),
+//                        ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build(),
+//                        bgScanCallback
+//                    )
+                }
+
+//                COMMAND_BLE_SCAN -> {
+//                }
+
                 COMMAND_CONTINUE_BACKGROUND_SCAN -> {
 
                     callbacksLock.lock()
@@ -295,7 +416,7 @@ class BLEService : Service() {
                     callbacksLock.unlock()
 
                     this@ServiceHandler.removeMessages(COMMAND_CONTINUE_BACKGROUND_SCAN)
-                    this@ServiceHandler.obtainMessage()?.also { msg ->
+                    this@ServiceHandler.obtainMessage().also { msg ->
                         msg.what = COMMAND_CONTINUE_BACKGROUND_SCAN
                         serviceHandler?.sendMessageDelayed(msg, 5000)
                     }
@@ -308,39 +429,46 @@ class BLEService : Service() {
                         wasAudioPlaying = true
                         audioTimeNotPlaying = 0
 
-                        if (bluetoothLeScanner == null) {
+//                        if (bluetoothLeScanner == null) {
+//                            val bluetoothAdapter =
+//                                (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+//                            bluetoothLeScanner = bluetoothAdapter!!.bluetoothLeScanner
+//                        }
+//
+//                        bluetoothLeScanner?.startScan(
+//                            getScanFilters(),
+//                            ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build(),
+//                            bgScanCallback
+//                        )
 
-                            val bluetoothAdapter =
-                                (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
-                            bluetoothLeScanner = bluetoothAdapter!!.bluetoothLeScanner
-                            bluetoothLeScanner!!.startScan(
-                                getScanFilters(),
-                                ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build(),
-                                bgScanCallback
-                            )
+
+                        // Try to connect all known devices
+                        knownDevices.forEach { d ->
+                            connectDevice(d)
                         }
+
                     } else if (!isAudioPlaying && wasAudioPlaying) {
                         if (++audioTimeNotPlaying >= 12) {
                             // Disconnect everything and stop scanning after 60 seconds without music
-                            stopBLEBGScanner()
+                            wasAudioPlaying = false
+//                            stopBLEBGScanner()
+
                             callbacksLock.lock()
-                            devices.clear()
-                            callbacksLock.unlock()
+                            connectedDevices.clear()
                             performStopChecks()
+                            callbacksLock.unlock()
                         }
                     }
                 }
 
-                COMMAND_END_BACKGROUND_SCAN -> {
+                COMMAND_END_CONTINUOUS_SERVICE -> {
                     this@ServiceHandler.removeMessages(COMMAND_CONTINUE_BACKGROUND_SCAN)
                     callbacksLock.lock()
                     isScanningForEndpoints = false
+                    connectedDevices.clear()
                     callbacksLock.unlock()
 
-                    stopBLEBGScanner()
-                    callbacksLock.lock()
-                    devices.clear()
-                    callbacksLock.unlock()
+//                    stopBLEBGScanner()
                     performStopChecks()
                 }
             }
@@ -400,6 +528,7 @@ class BLEService : Service() {
                 override fun shutdown() {
                     removeAllListeners()
                     visualizer?.release()
+                    visualizer = null
                 }
 
                 fun beginCapture() {
@@ -413,7 +542,7 @@ class BLEService : Service() {
                         val range = Visualizer.getCaptureSizeRange()
                         visualizer!!.captureSize = max(range[0], min(range[1], 1024))
                         visualizerRange = visualizer!!.captureSize
-                        visualizer!!.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
+//                        visualizer!!.setMeasurementMode(MEASUREMENT_MODE_PEAK_RMS)
                         visualizer!!.setDataCaptureListener(
                             this,
                             Visualizer.getMaxCaptureRate(),
@@ -457,8 +586,8 @@ class BLEService : Service() {
                         }
                     }
 
-                    var aAvg = fftHistoryAvg[fftHistoryWriter]
-                    var aPeak = fftHistoryPeak[fftHistoryWriter]
+                    val aAvg = fftHistoryAvg[fftHistoryWriter]
+                    val aPeak = fftHistoryPeak[fftHistoryWriter]
                     aAvg[boundsIndex] = sum
                     aPeak[boundsIndex] = vMax
 
@@ -491,7 +620,7 @@ class BLEService : Service() {
                 var fft: FloatArray? = null
                 //                var fftLast: FloatArray? = null
                 var fftSmooth: FloatArray = FloatArray(FFT_FX_SIZE) { 0.0f }
-                var fftBeat: ByteArray = ByteArray(FFT_FX_SIZE) { 0 }
+                var fftBeat: ByteArray = ByteArray(1) { 0 }
                 //                                val peakRMS = Visualizer.MeasurementPeakRms()
                 override fun onFftDataCapture(
                     visualizer: Visualizer?,
@@ -538,15 +667,19 @@ class BLEService : Service() {
 
                     val processedData = floatArrayOf(
                         //Math.min(255.0f, Math.max(0.0f, (peakRMS.mRms.toFloat() / peakRMS.mPeak.toFloat() - 2.0f) * 100.0f)).toByte(),
-                        sampleFFT(fft!!, 0, 0, 2, 0.6f),
-                        sampleFFT(fft!!, 1, 4, 8, 0.7f),
-                        sampleFFT(fft!!, 2, 8, 16, 0.75f),
+                        sampleFFT(fft!!, 0, 0, 2, 0.55f),
+                        //sampleFFT(fft!!, 0, 0, 16, 0.8f),
+                        //sampleFFT(fft!!, 0, 0, 1, 0.3f),
+                        sampleFFT(fft!!, 1, 4, 8, 0.65f),
+                        sampleFFT(fft!!, 2, 8, 16, 0.7f),
                         sampleFFT(fft!!, 3, 16, 32, 0.75f),
                         sampleFFT(fft!!, 4, 32, 224, 0.75f),
                         sampleFFT(fft!!, 5, 224, 512, 0.75f)
                     )
 
+                    fftBeat[0] = 0
                     for (i in 0 until FFT_FX_SIZE) {
+                    //for (i in 0 until 1) {
                         if (processedData[i] > 0.5f) {
                             fftSmooth[i] = processedData[i]
                         } else {
@@ -557,7 +690,7 @@ class BLEService : Service() {
                         }
                         val hasBeat = fftSmooth[i] >= 0.5f
 //                        fftBeat[i] = (fftSmooth[i] * 255).toByte()
-                        fftBeat[i] = if (hasBeat) 255.toByte() else 0
+                        fftBeat[0] = fftBeat[0].or(if (hasBeat) 1.shl(i).toByte() else 0)
                     }
 
                     listeners.forEach { listener ->
@@ -573,7 +706,7 @@ class BLEService : Service() {
                 }
             }
 
-        var gattWrapper = object : BluetoothGattWrapper() {
+        var gattWrapper = object : BluetoothGattWrapper(false) {
 
             var ledService: BluetoothGattService? = null
             var audioDataCharacteristic: BluetoothGattCharacteristic? = null
@@ -581,13 +714,18 @@ class BLEService : Service() {
             var audioFrame: Int = 0
 
             override fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-                connectedGatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+
+                this@ServiceHandler.obtainMessage().also { msg ->
+                    msg.what = COMMAND_REGISTER_DEVICE
+                    msg.obj = gatt?.device
+                    serviceHandler?.sendMessage(msg)
+                }
+
+                gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
                 ledService = gatt?.getService(BLEConstants.LEDService)
                 audioDataCharacteristic =
                     ledService?.getCharacteristic(BLEConstants.AudioDataCharacteristic)
-                if (audioDataCharacteristic != null &&
-                    gatt != null
-                ) {
+                if (audioDataCharacteristic != null && gatt != null) {
                     val deviceListener = object : AudioListener {
                         override fun receiveProcessedAudio(data: ByteArray) {
                             audioDataCharacteristic?.value = data
@@ -598,19 +736,19 @@ class BLEService : Service() {
                             }
                         }
                     }
-                    deviceListeners[gatt!!.device] = deviceListener;
+                    deviceListeners[gatt.device] = deviceListener;
                     audioProcessor.addListener(deviceListener)
                 }
             }
 
             override fun onWrappedDisconnected(gatt: BluetoothGatt?) {
-                if (gatt != null && deviceListeners[gatt!!.device] != null) {
-                    val device = gatt!!.device
+                if (gatt != null && deviceListeners[gatt.device] != null) {
+                    val device = gatt.device
                     audioProcessor.removeListener(deviceListeners[device]!!)
                     deviceListeners.remove(device)
                 }
 
-                this@ServiceHandler.obtainMessage()?.also { msg ->
+                this@ServiceHandler.obtainMessage().also { msg ->
                     msg.what = COMMAND_UNREGISTER_DEVICE
                     msg.obj = gatt?.device
                     serviceHandler?.sendMessage(msg)
@@ -673,55 +811,58 @@ class BLEService : Service() {
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
         val intentCmd = intent.extras?.getInt(INTENT_KEY_COMMAND)
 
-        val shouldRegister =
-            intentCmd == COMMAND_REGISTER_DEVICE || intentCmd == COMMAND_REGISTER_CALLBACK
+        val shouldRegister = intentCmd == COMMAND_REGISTER_CALLBACK
         val device: BluetoothDevice? = intent.extras?.get(INTENT_KEY_DEVICE) as? BluetoothDevice
         val audioCallback: String? = intent.extras?.get(INTENT_KEY_CALLBACK) as? String
 
-        var deviceCount: Int
+//        var deviceCount: Int
 
-        callbacksLock.lock()
-        if (device != null) {
-            deviceCount = devices.size
-            if (shouldRegister) {
-                ++deviceCount
-            } else {
-                --deviceCount
-            }
+//        callbacksLock.lock()
+//        if (device != null) {
+//            deviceCount = devices.size
+//            if (shouldRegister) {
+//                ++deviceCount
+//            } else {
+//                --deviceCount
+//            }
+//
+//            serviceHandler?.obtainMessage()?.also { msg ->
+//                msg.what = intent.extras?.getInt(INTENT_KEY_COMMAND)!!
+//                msg.obj = device
+//                serviceHandler?.sendMessage(msg)
+//            }
+//        } else {
+//        deviceCount = devices.size
 
-            serviceHandler?.obtainMessage()?.also { msg ->
-                msg.what = intent.extras?.getInt(INTENT_KEY_COMMAND)!!
+        serviceHandler?.obtainMessage()?.also { msg ->
+            msg.what = intent.extras?.getInt(INTENT_KEY_COMMAND)!!
+            if (device != null) {
                 msg.obj = device
-                serviceHandler?.sendMessage(msg)
-            }
-        } else {
-            deviceCount = devices.size
-
-            serviceHandler?.obtainMessage()?.also { msg ->
-                msg.what = intent.extras?.getInt(INTENT_KEY_COMMAND)!!
+            } else {
                 msg.obj = audioCallback
-                serviceHandler?.sendMessage(msg)
             }
+            serviceHandler?.sendMessage(msg)
         }
-        callbacksLock.unlock()
+//        }
+//        callbacksLock.unlock()
 
         var pendingIntent: PendingIntent? = null
-        if (shouldRegister || intentCmd == COMMAND_CONTINUE_BACKGROUND_SCAN) {
-            if (device != null) {
-                pendingIntent =
-                    Intent(this, CollarSettingsActivity::class.java).let { notificationIntent ->
-                        notificationIntent.putExtra("collarName", device?.name!!)
-                        notificationIntent.putExtra("collarDevice", device)
-                        TaskStackBuilder.create(this)
-                            .addNextIntentWithParentStack(notificationIntent)
-                            .getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
-                    }
-            } else {
-                pendingIntent = PendingIntent.getActivity(
-                    this,
-                    0, Intent(this, MainActivity::class.java), 0
-                )
-            }
+        if (shouldRegister || intentCmd == COMMAND_START_CONTINUOUS_SERVICE) {
+//            if (device != null) {
+//                pendingIntent =
+//                    Intent(this, CollarSettingsActivity::class.java).let { notificationIntent ->
+//                        notificationIntent.putExtra("collarName", device.name!!)
+//                        notificationIntent.putExtra("collarDevice", device)
+//                        TaskStackBuilder.create(this)
+//                            .addNextIntentWithParentStack(notificationIntent)
+//                            .getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT)
+//                    }
+//            } else {
+            pendingIntent = PendingIntent.getActivity(
+                this,
+                0, Intent(this, MainActivity::class.java), 0
+            )
+//            }
         }
 
 //        if (intentCmd == COMMAND_BEGIN_BACKGROUND_SCAN) {
@@ -735,7 +876,7 @@ class BLEService : Service() {
 //        }
 
         if (pendingIntent != null) {
-            val notification = getBLENotification(pendingIntent, isProcessingAudio, deviceCount)
+            val notification = getBLENotification(pendingIntent, isProcessingAudio, 0)
             startForeground(SERVICE_NOTIF_ID, notification)
         }
 

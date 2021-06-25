@@ -87,8 +87,8 @@ class CollarSettingsActivity : AppCompatActivity(),
     }
 
     override fun onPause() {
-        super.onPause()
         gattWrapper.close()
+        super.onPause()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -190,13 +190,26 @@ class CollarSettingsActivity : AppCompatActivity(),
             ActivityCompat.requestPermissions(
                 this, BLEService.getPermissionList(), PERMISSION_REQUEST_RECORD_AUDIO
             )
-        } else if (!shouldEnableStream) {
+        } else if (shouldEnableStream) {
             Intent(this, BLEService::class.java).also { intent ->
-                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_UNREGISTER_DEVICE)
+                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_ADD_KNOWN_DEVICE)
                 intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
-                startService(intent)
+                startForegroundService(intent)
+            }
+        } else {
+            Intent(this, BLEService::class.java).also { intent ->
+                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_REMOVE_KNOWN_DEVICE)
+                intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+                startForegroundService(intent)
             }
         }
+//        else if (!shouldEnableStream) {
+//            Intent(this, BLEService::class.java).also { intent ->
+//                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_UNREGISTER_DEVICE)
+//                intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+//                startService(intent)
+//            }
+//        }
 
 //        if (shouldEnableStream) {
 //            if (BLEService.needsPermissions(this)) {
@@ -242,7 +255,7 @@ class CollarSettingsActivity : AppCompatActivity(),
         }
     }
 
-    var gattWrapper: BluetoothGattWrapper = object : BluetoothGattWrapper() {
+    var gattWrapper: BluetoothGattWrapper = object : BluetoothGattWrapper(true) {
         override fun onWrappedServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             ledService = gatt!!.getService(BLEConstants.LEDService)
             val ledTypeCharacteristic =

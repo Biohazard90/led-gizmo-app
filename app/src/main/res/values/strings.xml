@@ -7,7 +7,7 @@
     <string name="action_stop_service">Stop Service</string>
     <string name="action_start_service">Start Service</string>
 
-    <string name="device_searching">Searching Collars…</string>
+    <string name="device_searching">Searching devices…</string>
     <string name="device_nothing_found">No Collars found!</string>
     <string name="confirm">OK</string>
     <string name="cancel">Cancel</string>

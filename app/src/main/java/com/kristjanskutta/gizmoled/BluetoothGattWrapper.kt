@@ -31,7 +31,8 @@ class BluetoothGattWrapperInstance {
 //    var callbacks = HashSet<BLEWrapperInterface>()
 }
 
-abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterface {
+abstract class BluetoothGattWrapper(val shouldAutoDisconnect: Boolean) : BluetoothGattCallback(),
+    BLEWrapperInterface {
 
     companion object {
         var deviceHelpers = HashMap<String, BluetoothGattWrapperInstance>()
@@ -39,7 +40,8 @@ abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterfa
 
     @Volatile
     protected var connectedGatt: BluetoothGatt? = null
-    var sharedInstance: BluetoothGattWrapperInstance? = null
+
+    private var sharedInstance: BluetoothGattWrapperInstance? = null
 
     private fun processQueue() {
         sharedInstance!!.lock.lock()
@@ -56,7 +58,8 @@ abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterfa
                 }
 
                 1 -> {
-                    val writeStatus = connectedGatt?.writeCharacteristic(cmd.characteristic) ?: false
+                    val writeStatus =
+                        connectedGatt?.writeCharacteristic(cmd.characteristic) ?: false
                     if (!writeStatus) {
                         Log.i("asdf", "write failed")
                     }
@@ -67,9 +70,19 @@ abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterfa
         }
     }
 
+    private fun clearQueue() {
+        if (sharedInstance != null) {
+            sharedInstance!!.lock.lock()
+            if (sharedInstance!!.busyCommand?.callback == this) {
+                sharedInstance!!.busyCommand = null
+            }
+            sharedInstance!!.queue.removeIf { q -> q.callback == this }
+            sharedInstance!!.lock.unlock()
+        }
+    }
+
     override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
         super.onConnectionStateChange(gatt, status, newState)
-
         if (status == BluetoothGatt.GATT_SUCCESS &&
             gatt != null
         ) {
@@ -80,24 +93,28 @@ abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterfa
                 deviceHelpers[gatt.device.address] = sharedInstance!!
             }
 
-//            sharedInstance!!.callbacks.add(this)
-
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 // We successfully connected, proceed with service discovery
                 connectedGatt = gatt
-                gatt?.discoverServices()
+                gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 // We successfully disconnected on our own request
                 onWrappedDisconnected(gatt)
                 connectedGatt = null
-                gatt?.close();
+                if (shouldAutoDisconnect) {
+                    gatt.close()
+                }
+                clearQueue()
             } else {
                 // We're CONNECTING or DISCONNECTING, ignore for now
             }
         } else {
             onWrappedDisconnected(gatt)
             connectedGatt = null
-            gatt?.close()
+            if (shouldAutoDisconnect) {
+                gatt?.close()
+            }
+            clearQueue()
         }
     }
 
@@ -151,14 +168,7 @@ abstract class BluetoothGattWrapper : BluetoothGattCallback(), BLEWrapperInterfa
     open fun close() {
         connectedGatt?.close()
 //        sharedInstance?.callbacks?.remove(this)
-        if (sharedInstance != null) {
-            sharedInstance!!.lock.lock()
-            if (sharedInstance!!.busyCommand?.callback == this) {
-                sharedInstance!!.busyCommand = null
-            }
-            sharedInstance!!.queue.removeIf { q -> q.callback == this }
-            sharedInstance!!.lock.unlock()
-        }
+        clearQueue()
     }
 
 //    fun wrappedGetService(id: UUID): BluetoothGattService? {

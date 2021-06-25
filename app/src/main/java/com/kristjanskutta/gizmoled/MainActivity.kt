@@ -58,7 +58,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         useBGService =
-            PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_USE_SERVICE_KEY, useBGService)
+            PreferenceManager.getDefaultSharedPreferences(this)
+                .getBoolean(PREF_USE_SERVICE_KEY, useBGService)
 
         setContentView(R.layout.activity_main)
         setSupportActionBar(toolbar)
@@ -171,11 +172,13 @@ class MainActivity : AppCompatActivity() {
         menuInflater.inflate(R.menu.menu_main, menu)
 
         val serviceIsRunning = useBGService
+        menu.findItem(R.id.action_test_visualizer)?.isVisible = false
         val stopOption = menu.findItem(R.id.action_stop_service)
         val startOption = menu.findItem(R.id.action_start_service)
         stopOption?.isVisible = serviceIsRunning
         startOption?.isVisible = !serviceIsRunning && bluetoothAdapter?.bluetoothLeScanner != null
-        return true
+        //return true
+        return super.onCreateOptionsMenu(menu)
     }
 
     private fun startBGService() {
@@ -189,9 +192,9 @@ class MainActivity : AppCompatActivity() {
         Intent(this, BLEService::class.java).also { intent ->
             intent.putExtra(
                 BLEService.INTENT_KEY_COMMAND,
-                BLEService.COMMAND_CONTINUE_BACKGROUND_SCAN
+                BLEService.COMMAND_START_CONTINUOUS_SERVICE
             )
-            startService(intent)
+            startForegroundService(intent)
         }
     }
 
@@ -203,9 +206,9 @@ class MainActivity : AppCompatActivity() {
         Intent(this@MainActivity, BLEService::class.java).also { intent ->
             intent.putExtra(
                 BLEService.INTENT_KEY_COMMAND,
-                BLEService.COMMAND_END_BACKGROUND_SCAN
+                BLEService.COMMAND_END_CONTINUOUS_SERVICE
             )
-            startService(intent)
+            startForegroundService(intent)
         }
         invalidateOptionsMenu()
     }
@@ -282,7 +285,7 @@ class MainActivity : AppCompatActivity() {
 
     private val mLeScanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            if (result?.scanRecord == null || result?.device == null || result?.device?.name == null) {
+            if (result?.scanRecord == null || result.device == null || result.device?.name == null) {
                 return
             }
 
@@ -293,13 +296,32 @@ class MainActivity : AppCompatActivity() {
             }
 
             val services = result.scanRecord?.serviceUuids
+            val hasVisualizerService = services?.contains(ParcelUuid(BLEConstants.LEDServiceV))
             if (services?.contains(ParcelUuid(BLEConstants.LEDService)) != true &&
-                services?.contains(ParcelUuid(BLEConstants.LEDServiceV)) != true
+                hasVisualizerService != true
             ) {
                 return
             }
 
-//            val test = result?.scanRecord?.getManufacturerSpecificData()
+            if (hasVisualizerService == true) {
+                Intent(this@MainActivity, BLEService::class.java).also { intent ->
+                    intent.putExtra(
+                        BLEService.INTENT_KEY_COMMAND,
+                        BLEService.COMMAND_ADD_KNOWN_DEVICE
+                    )
+                    intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+                    startForegroundService(intent)
+                }
+            } else {
+                Intent(this@MainActivity, BLEService::class.java).also { intent ->
+                    intent.putExtra(
+                        BLEService.INTENT_KEY_COMMAND,
+                        BLEService.COMMAND_REMOVE_KNOWN_DEVICE
+                    )
+                    intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
+                    startForegroundService(intent)
+                }
+            }
 
             if (callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES) {
                 addFoundCollar(device, false)
@@ -375,12 +397,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setListFailure() {
-        if (listInit) {
-            listInit = false
-            knownCollars.clear()
-            collars.clear()
-            collars.add(Collar(null, getString(R.string.device_nothing_found), false))
-            rv_collars.adapter?.notifyDataSetChanged()
-        }
+        listInit = false
+        knownCollars.clear()
+        collars.clear()
+        collars.add(Collar(null, getString(R.string.device_nothing_found), false))
+        rv_collars.adapter?.notifyDataSetChanged()
     }
 }
