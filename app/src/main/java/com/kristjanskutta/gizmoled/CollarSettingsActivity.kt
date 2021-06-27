@@ -180,10 +180,11 @@ class CollarSettingsActivity : AppCompatActivity(),
 
     private fun updateVisualizerStreamEnabled() {
         val shouldEnableStream = currentEffectList != null &&
+                currentEffectIndex < currentEffectList!!.size &&
                 Effects.visualizerEffectNames.contains(
-                    currentEffectList?.elementAt(
+                    currentEffectList!!.elementAt(
                         currentEffectIndex
-                    ) ?: -1
+                    )
                 )
 
         if (shouldEnableStream && BLEService.needsPermissions(this)) {
@@ -194,13 +195,16 @@ class CollarSettingsActivity : AppCompatActivity(),
             Intent(this, BLEService::class.java).also { intent ->
                 intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_ADD_KNOWN_DEVICE)
                 intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
-                startForegroundService(intent)
+                startService(intent)
             }
         } else {
             Intent(this, BLEService::class.java).also { intent ->
-                intent.putExtra(BLEService.INTENT_KEY_COMMAND, BLEService.COMMAND_REMOVE_KNOWN_DEVICE)
+                intent.putExtra(
+                    BLEService.INTENT_KEY_COMMAND,
+                    BLEService.COMMAND_REMOVE_KNOWN_DEVICE
+                )
                 intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
-                startForegroundService(intent)
+                startService(intent)
             }
         }
 //        else if (!shouldEnableStream) {
@@ -326,7 +330,9 @@ class CollarSettingsActivity : AppCompatActivity(),
                 }
             }
 
-            if (characteristic?.uuid.toString().startsWith(BLEConstants.strLEDEffectSettingsCharacteristicBase)) {
+            if (characteristic?.uuid.toString()
+                    .startsWith(BLEConstants.strLEDEffectSettingsCharacteristicBase)
+            ) {
                 val value = characteristic?.value!!
                 runOnUiThread {
                     currentEffectCharacteristic = characteristic
@@ -559,10 +565,11 @@ class CollarEffectsFragment : PreferenceFragmentCompat() {
             parser.next()
             parser.nextTag()
 
+            val effectNameId = effectList[currentEffect]
             val category = PreferenceCategory(preferenceScreen.context)
             category.isIconSpaceReserved = false
             category.title = Effects.getEffectSettingCategoryTitle(
-                currentEffect.toUByte(),
+                effectNameId.toUByte(),
                 preferenceScreen.context
             )
             preferenceScreen.addPreference(category)

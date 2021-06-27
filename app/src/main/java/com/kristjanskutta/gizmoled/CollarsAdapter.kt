@@ -5,8 +5,9 @@ import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.android.synthetic.main.collar_item.view.*
 
 class CollarsAdapter(val items: ArrayList<Collar>, val context: Context) :
     RecyclerView.Adapter<ViewHolder>() {
@@ -27,10 +28,10 @@ class CollarsAdapter(val items: ArrayList<Collar>, val context: Context) :
     // Binds each animal in the ArrayList to a view
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val collar = items.get(position)
-        holder?.tvCollarName?.text = collar.name
-        holder?.imgChev?.visibility = if (collar.device != null) View.VISIBLE else View.GONE
-        holder?.tvStatus?.visibility = if (collar.connected) View.VISIBLE else View.GONE
-        holder?.collar = collar
+        holder.tvCollarName?.text = collar.name
+        holder.imgChev?.visibility = if (collar.device != null) View.VISIBLE else View.GONE
+        holder.tvStatus?.visibility = if (collar.connected) View.VISIBLE else View.GONE
+        holder.collar = collar
 
         ///////////////////////////////////////////
         // DEBUG auto select first device
@@ -50,9 +51,9 @@ class CollarsAdapter(val items: ArrayList<Collar>, val context: Context) :
 
 class ViewHolder(val context: Context, view: View) : RecyclerView.ViewHolder(view) {
     // Holds the TextView that will add each animal to
-    val tvCollarName = view.tv_collar
-    val imgChev = view.img_chev
-    val tvStatus = view.tv_status
+    val tvCollarName = view.findViewById<TextView>(R.id.tv_collar)
+    val imgChev = view.findViewById<ImageButton>(R.id.img_chev)
+    val tvStatus = view.findViewById<TextView>(R.id.tv_status)
     var collar: Collar? = null
 
     init {

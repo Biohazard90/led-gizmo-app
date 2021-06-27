@@ -55,6 +55,8 @@
     <string name="category_pulse_settings">Pulse settings</string>
     <string name="effect_sparkle">Sparkle</string>
     <string name="category_sparkle_settings">Sparkle settings</string>
+    <string name="effect_christmas">Christmas</string>
+    <string name="category_christmas_settings">Christmas settings</string>
 
     <!-- Service -->
     <string name="service_title">GLED Audio Visualizer</string>

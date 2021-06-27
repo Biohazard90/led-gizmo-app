@@ -108,6 +108,7 @@ class BLEService : Service() {
     private val connectedDevices = HashMap<BluetoothDevice, Int>()
     private var isScanningForEndpoints = false
     private var isProcessingAudio = false
+    private var isForegroundService = false
 
     fun getDevices(): List<BluetoothDevice> {
         callbacksLock.lock()
@@ -151,6 +152,10 @@ class BLEService : Service() {
 
         private fun updateNotification() {
             if (isStopping) {
+                return
+            }
+
+            if (!isForegroundService) {
                 return
             }
 
@@ -205,6 +210,7 @@ class BLEService : Service() {
 //            stopBLEBGScanner()
             audioProcessor.shutdown()
             gattWrapper.close()
+            isForegroundService = false
             stopForeground(true)
         }
 
@@ -220,14 +226,14 @@ class BLEService : Service() {
             callbacksLock.unlock()
         }
 
-        private fun getScanFilters(): List<ScanFilter> {
-            return listOf(
-                ScanFilter
-                    .Builder()
-                    .setServiceUuid(ParcelUuid(BLEConstants.LEDServiceV))
-                    .build()
-            )
-        }
+//        private fun getScanFilters(): List<ScanFilter> {
+//            return listOf(
+//                ScanFilter
+//                    .Builder()
+//                    .setServiceUuid(ParcelUuid(BLEConstants.LEDServiceV))
+//                    .build()
+//            )
+//        }
 
 //        private val bgScanCallback: ScanCallback = object : ScanCallback() {
 //            override fun onScanResult(callbackType: Int, result: ScanResult?) {
@@ -877,6 +883,7 @@ class BLEService : Service() {
 
         if (pendingIntent != null) {
             val notification = getBLENotification(pendingIntent, isProcessingAudio, 0)
+            isForegroundService = true
             startForeground(SERVICE_NOTIF_ID, notification)
         }
 

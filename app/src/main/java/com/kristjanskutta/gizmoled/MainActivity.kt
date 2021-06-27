@@ -11,6 +11,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.*
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.*
 import android.view.ContextMenu
 import android.view.Menu
@@ -19,11 +20,11 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
-import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.android.synthetic.main.content_main.*
-
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,7 +33,7 @@ class MainActivity : AppCompatActivity() {
     private val PERMISSION_REQUEST_ALL = 5001
     private val handler: Handler = Handler(Looper.getMainLooper())
     private var bleBinder: BLEService.BLEBinder? = null
-    private var useBGService = true
+    private var useBGService = false
 
     private val PREF_USE_SERVICE_KEY = "serviceEnabled"
 
@@ -62,7 +63,14 @@ class MainActivity : AppCompatActivity() {
                 .getBoolean(PREF_USE_SERVICE_KEY, useBGService)
 
         setContentView(R.layout.activity_main)
-        setSupportActionBar(toolbar)
+//        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+//        setSupportActionBar(toolbar)
+
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        if (!LocationManagerCompat.isLocationEnabled(lm)) {
+            // Start Location Settings Activity, you should explain to the user why he need to enable location before.
+            startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        }
 
         if (ContextCompat.checkSelfPermission(
                 this,
@@ -93,7 +101,7 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        addDevice.setOnClickListener { view ->
+        findViewById<FloatingActionButton>(R.id.addDevice).setOnClickListener { view ->
             stopScanningAndClear()
             scanLeDevice(true)
         }
@@ -105,10 +113,11 @@ class MainActivity : AppCompatActivity() {
 //        collars.add("dev 1")
 //        rv_collars.adapter?.notifyDataSetChanged()
         // Creates a vertical Layout Manager
-        rv_collars.layoutManager = LinearLayoutManager(this)
+        val rvCollars = findViewById<RecyclerView>(R.id.rv_collars)
+        rvCollars?.layoutManager = LinearLayoutManager(this)
 
         // Access the RecyclerView Adapter and load the data into it
-        rv_collars.adapter = CollarsAdapter(collars, this)
+        rvCollars?.adapter = CollarsAdapter(collars, this)
 
         // Ensures Bluetooth is available on the device and it is enabled. If not,
         // displays a dialog requesting user permission to enable Bluetooth.
@@ -165,6 +174,7 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == PERMISSION_REQUEST_ALL) {
             scanLeDevice(true)
         }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -194,7 +204,7 @@ class MainActivity : AppCompatActivity() {
                 BLEService.INTENT_KEY_COMMAND,
                 BLEService.COMMAND_START_CONTINUOUS_SERVICE
             )
-            startForegroundService(intent)
+            startService(intent)
         }
     }
 
@@ -208,7 +218,7 @@ class MainActivity : AppCompatActivity() {
                 BLEService.INTENT_KEY_COMMAND,
                 BLEService.COMMAND_END_CONTINUOUS_SERVICE
             )
-            startForegroundService(intent)
+            startService(intent)
         }
         invalidateOptionsMenu()
     }
@@ -259,7 +269,7 @@ class MainActivity : AppCompatActivity() {
 
         val nCollar = Collar(device, device.name!!, connected)
         collars.add(nCollar)
-        rv_collars.adapter?.notifyDataSetChanged()
+        findViewById<RecyclerView>(R.id.rv_collars).adapter?.notifyDataSetChanged()
     }
 
     private fun addConnectedCollars(): Boolean {
@@ -310,7 +320,7 @@ class MainActivity : AppCompatActivity() {
                         BLEService.COMMAND_ADD_KNOWN_DEVICE
                     )
                     intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
-                    startForegroundService(intent)
+                    startService(intent)
                 }
             } else {
                 Intent(this@MainActivity, BLEService::class.java).also { intent ->
@@ -319,7 +329,7 @@ class MainActivity : AppCompatActivity() {
                         BLEService.COMMAND_REMOVE_KNOWN_DEVICE
                     )
                     intent.putExtra(BLEService.INTENT_KEY_DEVICE, device)
-                    startForegroundService(intent)
+                    startService(intent)
                 }
             }
 
@@ -361,7 +371,7 @@ class MainActivity : AppCompatActivity() {
                 }, SCAN_PERIOD)
                 mScanning = true
 
-                startBGService()
+//                startBGService()
 
                 bluetoothLeScanner.startScan(mLeScanCallback)
 
@@ -393,7 +403,7 @@ class MainActivity : AppCompatActivity() {
         knownCollars.clear()
         collars.clear()
         collars.add(Collar(null, getString(R.string.device_searching), false))
-        rv_collars.adapter?.notifyDataSetChanged()
+        findViewById<RecyclerView>(R.id.rv_collars).adapter?.notifyDataSetChanged()
     }
 
     private fun setListFailure() {
@@ -401,6 +411,6 @@ class MainActivity : AppCompatActivity() {
         knownCollars.clear()
         collars.clear()
         collars.add(Collar(null, getString(R.string.device_nothing_found), false))
-        rv_collars.adapter?.notifyDataSetChanged()
+        findViewById<RecyclerView>(R.id.rv_collars).adapter?.notifyDataSetChanged()
     }
 }
