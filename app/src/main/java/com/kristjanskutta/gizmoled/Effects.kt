@@ -20,7 +20,10 @@ object Effects {
         5 to R.string.effect_visualizer,
         6 to R.string.effect_pulse,
         7 to R.string.effect_sparkle,
-        8 to R.string.effect_christmas
+        8 to R.string.effect_christmas,
+        9 to R.string.effect_accel,
+        10 to R.string.effect_noise,
+        11 to R.string.effect_empty
     )
 
     fun getEffectTitle(effectNameId: UByte, context: Context?): String {
@@ -36,7 +39,10 @@ object Effects {
         5 to R.string.category_visualizer_settings,
         6 to R.string.category_pulse_settings,
         7 to R.string.category_sparkle_settings,
-        8 to R.string.category_christmas_settings
+        8 to R.string.category_christmas_settings,
+        9 to R.string.category_accel_settings,
+        10 to R.string.category_noise_settings,
+        11 to R.string.category_empty_settings
     )
 
     fun getEffectSettingCategoryTitle(effectNameId: UByte, context: Context?): String {
@@ -60,7 +66,8 @@ object Effects {
         11 to R.string.preference_rainbow_cycle_length,
         12 to R.string.preference_fade_in,
         13 to R.string.preference_fade_out,
-        14 to R.string.preference_angle
+        14 to R.string.preference_angle,
+        15 to R.string.preference_sensitivity
     )
 
     fun getEffectSettingName(settingNameId: UByte, context: Context?): String {

@@ -37,6 +37,7 @@
     <string name="preference_rainbow_cycle_speed">Rainbow cycle speed</string>
     <string name="preference_rainbow_cycle_length">Rainbow cycle length</string>
     <string name="preference_length">Length</string>
+    <string name="preference_sensitivity">Sensitivity</string>
 
     <!-- Effect names-->
     <string name="effect_blink">Blink</string>
@@ -57,6 +58,12 @@
     <string name="category_sparkle_settings">Sparkle settings</string>
     <string name="effect_christmas">Christmas</string>
     <string name="category_christmas_settings">Christmas settings</string>
+    <string name="effect_accel">Acceleration</string>
+    <string name="category_accel_settings">Acceleration settings</string>
+    <string name="effect_noise">Noise level</string>
+    <string name="category_noise_settings">Noise level settings</string>
+    <string name="effect_empty">Empty</string>
+    <string name="category_empty_settings">Empty settings</string>
 
     <!-- Service -->
     <string name="service_title">GLED Audio Visualizer</string>
