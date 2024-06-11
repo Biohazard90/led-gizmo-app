@@ -135,6 +135,7 @@ class CollarSettingsActivity : AppCompatActivity(),
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_RECORD_AUDIO) {
             updateVisualizerStreamEnabled()
         }

@@ -23,7 +23,13 @@ object Effects {
         8 to R.string.effect_christmas,
         9 to R.string.effect_accel,
         10 to R.string.effect_noise,
-        11 to R.string.effect_empty
+        11 to R.string.effect_empty,
+        12 to R.string.effect_waves,
+        13 to R.string.effect_drops,
+        14 to R.string.effect_meteor,
+        15 to R.string.effect_wipe,
+        16 to R.string.effect_fire,
+        17 to R.string.effect_ambient
     )
 
     fun getEffectTitle(effectNameId: UByte, context: Context?): String {
@@ -42,7 +48,13 @@ object Effects {
         8 to R.string.category_christmas_settings,
         9 to R.string.category_accel_settings,
         10 to R.string.category_noise_settings,
-        11 to R.string.category_empty_settings
+        11 to R.string.category_empty_settings,
+        12 to R.string.category_waves_settings,
+        13 to R.string.category_drops_settings,
+        14 to R.string.category_meteor_settings,
+        15 to R.string.category_wipe_settings,
+        16 to R.string.category_fire_settings,
+        17 to R.string.category_ambient_settings
     )
 
     fun getEffectSettingCategoryTitle(effectNameId: UByte, context: Context?): String {
@@ -67,7 +79,13 @@ object Effects {
         12 to R.string.preference_fade_in,
         13 to R.string.preference_fade_out,
         14 to R.string.preference_angle,
-        15 to R.string.preference_sensitivity
+        15 to R.string.preference_sensitivity,
+        16 to R.string.preference_background_color,
+        17 to R.string.preference_rainbow_offset,
+        18 to R.string.preference_background_brightness,
+        19 to R.string.preference_sparkle_brightness,
+        20 to R.string.preference_sparkle_amount,
+        21 to R.string.preference_sparkle_speed,
     )
 
     fun getEffectSettingName(settingNameId: UByte, context: Context?): String {

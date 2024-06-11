@@ -31,6 +31,7 @@
     <string name="preference_fade_in">Fade in</string>
     <string name="preference_fade_out">Fade out</string>
     <string name="preference_brightness">Brightness</string>
+    <string name="preference_background_brightness">Background brightness</string>
     <string name="preference_decay">Decay</string>
     <string name="preference_angle">Angle</string>
     <string name="preference_rainbow">Rainbow</string>
@@ -38,6 +39,11 @@
     <string name="preference_rainbow_cycle_length">Rainbow cycle length</string>
     <string name="preference_length">Length</string>
     <string name="preference_sensitivity">Sensitivity</string>
+    <string name="preference_background_color">Background color</string>
+    <string name="preference_rainbow_offset">Rainbow offset</string>
+    <string name="preference_sparkle_brightness">Sparkle brightness</string>
+    <string name="preference_sparkle_amount">Sparkle amount</string>
+    <string name="preference_sparkle_speed">Sparkle speed</string>
 
     <!-- Effect names-->
     <string name="effect_blink">Blink</string>
@@ -64,6 +70,18 @@
     <string name="category_noise_settings">Noise level settings</string>
     <string name="effect_empty">Empty</string>
     <string name="category_empty_settings">Empty settings</string>
+    <string name="effect_waves">Waves</string>
+    <string name="category_waves_settings">Waves settings</string>
+    <string name="effect_drops">Drops</string>
+    <string name="category_drops_settings">Drops settings</string>
+    <string name="effect_meteor">Meteor</string>
+    <string name="category_meteor_settings">Meteor settings</string>
+    <string name="effect_wipe">Wipe</string>
+    <string name="category_wipe_settings">Wipe settings</string>
+    <string name="effect_fire">Fire</string>
+    <string name="category_fire_settings">Fire settings</string>
+    <string name="effect_ambient">Ambient</string>
+    <string name="category_ambient_settings">Ambient settings</string>
 
     <!-- Service -->
     <string name="service_title">GLED Audio Visualizer</string>

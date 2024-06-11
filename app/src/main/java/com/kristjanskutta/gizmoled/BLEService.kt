@@ -814,7 +814,10 @@ class BLEService : Service() {
         return builder.build()
     }
 
-    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null) {
+            return START_REDELIVER_INTENT
+        }
         val intentCmd = intent.extras?.getInt(INTENT_KEY_COMMAND)
 
         val shouldRegister = intentCmd == COMMAND_REGISTER_CALLBACK
